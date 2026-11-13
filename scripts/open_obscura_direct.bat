@@ -1,0 +1,3 @@
+@echo off
+echo Opening Obscura Files Chrome Profile directly...
+start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --profile-directory="Profile 31"

@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Chrome / Playwright browser session & profile (contains local cookies/passwords)
+chrome_profile/
+
+# Local database records & sensitive submission data
+data/*.json
+submissions.json
+downloads/
+
+# Environment variables & secrets
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+Thumbs.db
+.DS_Store
