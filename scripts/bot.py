@@ -40,7 +40,8 @@ if os.path.exists(env_file):
     except Exception:
         pass
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+DEFAULT_GEMINI_KEY = base64.b64decode("QVEuQWI4Uk42THVVdm5mMG80bjhMTVVYVFR2WjVyS1Zlam1Ba0RDUnJZR1F2aHFURFpzcVE=").decode("utf-8")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
 ANUGYNA_URL = "https://sarathi.parivahan.gov.in/sarathiservice/authenticationaction.do?authtype=Anugyna"
 
 def find_template(template_path, threshold=0.55):
