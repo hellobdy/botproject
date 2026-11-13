@@ -27,8 +27,8 @@ Follow these steps to run this project on any new PC or laptop:
 
 ### 1. Clone the Repository
 ```bash
-git clone <YOUR_REPOSITORY_URL>
-cd "BotProject - 1st step final"
+git clone https://github.com/hellobdy/botproject.git
+cd botproject
 ```
 
 ### 2. Install Dependencies
