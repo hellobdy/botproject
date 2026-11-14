@@ -759,7 +759,7 @@ async function executeStage2(state, appNo, dob, userPassword, derivedRtoCode, su
 // ───────── STAGE 1 TOGGLE (DEV TESTING) ─────────
 // Set to true to bypass Stage 1 (photo download) and test Stage 2 directly
 // Set to false to run the complete end-to-end flow with photo download
-const SKIP_STAGE_1 = true;
+const SKIP_STAGE_1 = false;
 
 async function runSarathiSearch(chatId, userName, state, appNo, dob, password = '', rtoCodeOverride = '', subId = null) {
   isProcessing = true;
