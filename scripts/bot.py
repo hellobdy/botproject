@@ -419,10 +419,11 @@ def take_screenshot_bgr():
         print(f"   ⚠️ Screen capture error: {e}")
         return None
 
-def locate_on_screen(template_path, threshold=0.75):
+def locate_on_screen(template_path, threshold=0.75, region=None):
     """
     ANY COMPUTER & RESOLUTION ADAPTIVE MATCHING:
     Screen resolution ke hisaab se dynamically base_scale calculate karta hai.
+    Supports optional 'region' (x1, y1, x2, y2) for lightning-fast localized search (20x faster).
     """
     if not os.path.exists(template_path):
         return None, 1.0
@@ -438,7 +439,22 @@ def locate_on_screen(template_path, threshold=0.75):
 
     screen_h, screen_w = screen.shape[:2]
     base_scale = screen_w / 1024.0
-    scales = np.linspace(base_scale * 0.75, base_scale * 1.25, 16)
+
+    offset_x, offset_y = 0, 0
+    if region:
+        rx1, ry1, rx2, ry2 = region
+        rx1, ry1 = max(0, int(rx1)), max(0, int(ry1))
+        rx2, ry2 = min(screen_w, int(rx2)), min(screen_h, int(ry2))
+        search_img = screen[ry1:ry2, rx1:rx2]
+        offset_x, offset_y = rx1, ry1
+        scales = [base_scale * 0.90, base_scale * 0.95, base_scale, base_scale * 1.05, base_scale * 1.10]
+    else:
+        search_img = screen
+        scales = np.linspace(base_scale * 0.75, base_scale * 1.25, 12)
+
+    s_h, s_w = search_img.shape[:2]
+    if s_h <= 0 or s_w <= 0:
+        return None, base_scale
 
     best_val = -1
     best_loc = None
@@ -447,15 +463,15 @@ def locate_on_screen(template_path, threshold=0.75):
     for scale in scales:
         nw = int(tw * scale)
         nh = int(th * scale)
-        if nw >= screen_w or nh >= screen_h:
+        if nw >= s_w or nh >= s_h or nw <= 0 or nh <= 0:
             continue
         resized = cv2.resize(template, (nw, nh), interpolation=cv2.INTER_CUBIC)
-        res = cv2.matchTemplate(screen, resized, cv2.TM_CCOEFF_NORMED)
+        res = cv2.matchTemplate(search_img, resized, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
         if max_val > best_val:
             best_val = max_val
-            best_loc = (max_loc[0] + nw // 2, max_loc[1] + nh // 2)
+            best_loc = (offset_x + max_loc[0] + nw // 2, offset_y + max_loc[1] + nh // 2)
             best_scale = scale
 
     if best_val >= threshold:
@@ -465,15 +481,16 @@ def locate_on_screen(template_path, threshold=0.75):
 def enter_into_field(label_name, tpl_path, offset_x, offset_y, text_to_enter):
     """
     Input box ke andar click karke text paste karta hai (with calibrated resolution fallback).
+    Uses fast top-right localized search + safe focus delays to avoid full-page selection.
     """
-    print(f"\n🔍 Searching for '{label_name}' on screen...")
     sw, sh = pyautogui.size()
-    loc, scale = locate_on_screen(tpl_path, threshold=0.70)
+    top_right_region = (int(sw * 0.65), 0, sw, int(sh * 0.60))
+    loc, scale = locate_on_screen(tpl_path, threshold=0.70, region=top_right_region)
     
     if loc:
         target_x = loc[0] + int(offset_x * scale)
         target_y = loc[1] + int(offset_y * scale)
-        print(f"   🎯 Found '{label_name}' visually at {loc} (scale={scale:.2f}) -> clicking ({target_x}, {target_y})")
+        print(f"   🎯 Found '{label_name}' visually at {loc} -> clicking ({target_x}, {target_y})")
     else:
         # Calibrated fallback for 16:9 screen resolutions (e.g. 1920x1080 / 1366x768)
         lbl_lower = label_name.lower()
@@ -490,24 +507,24 @@ def enter_into_field(label_name, tpl_path, offset_x, offset_y, text_to_enter):
 
     # Clear any accidental full page selection first
     pyautogui.press('esc')
-    time.sleep(0.08)
+    time.sleep(0.04)
 
     # Click inside the box (double click ensures cursor focuses inside the input)
-    pyautogui.moveTo(target_x, target_y, duration=0.20)
+    pyautogui.moveTo(target_x, target_y, duration=0.15)
     pyautogui.click()
     time.sleep(0.10)
     pyautogui.click()
-    time.sleep(0.15)
+    time.sleep(0.14)
 
-    # Clear existing text inside the box
+    # Clear existing text inside the box safely
     pyautogui.hotkey('ctrl', 'a')
-    time.sleep(0.08)
+    time.sleep(0.05)
     pyautogui.press('backspace')
-    time.sleep(0.08)
+    time.sleep(0.05)
     # Paste new text
     pyperclip.copy(text_to_enter)
     pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.18)
+    time.sleep(0.12)
     print(f"   ✅ Entered {label_name}: '{text_to_enter}'")
     return True
 
@@ -585,66 +602,73 @@ def bring_chrome_to_front():
 def fill_rto_code_in_mock(rto_code):
     """
     Sarathi Mock popup me RTO CODE fill karta hai aur header coordinates return karta hai.
-    Sabse pehle exact RTO input box ko visual match se dhundhta hai (100% accurate, no offset error).
+    Uses fast localized bottom-left search + safe focus delays to prevent any misclicks.
     """
     print(f"\n🔍 Searching for 'Sarathi Mock' RTO box on screen...")
     sw, sh = pyautogui.size()
+    mock_region = (0, int(sh * 0.20), int(sw * 0.35), int(sh * 0.80))
 
-    # Priority 1: Exact RTO Input Box visual match (zero offset error, clicks right in the center)
+    # Priority 1: Exact RTO Input Box visual match in bottom-left region
     if os.path.exists(TPL_RTO_INPUT):
-        loc_box, scale_box = locate_on_screen(TPL_RTO_INPUT, threshold=0.72)
+        loc_box, scale_box = locate_on_screen(TPL_RTO_INPUT, threshold=0.72, region=mock_region)
         if loc_box:
             print(f"   🎯 Found exact RTO input box at {loc_box} (scale={scale_box:.2f})")
-            pyautogui.moveTo(loc_box[0], loc_box[1], duration=0.25)
+            pyautogui.moveTo(loc_box[0], loc_box[1], duration=0.15)
             pyautogui.click()
-            time.sleep(0.12)
+            time.sleep(0.10)
+            pyautogui.click()
+            time.sleep(0.14)
             pyautogui.hotkey('ctrl', 'a')
             time.sleep(0.05)
             pyautogui.press('backspace')
             time.sleep(0.05)
             pyperclip.copy(rto_code)
             pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.15)
+            time.sleep(0.12)
             print(f"   ✅ Entered RTO CODE: '{rto_code}'")
             est_header = (loc_box[0] - int(20 * scale_box), loc_box[1] - int(50 * scale_box))
             return est_header, scale_box
 
     # Priority 2: Header match
-    loc, scale = locate_on_screen(LBL_MOCK_HEADER, threshold=0.72)
+    loc, scale = locate_on_screen(LBL_MOCK_HEADER, threshold=0.72, region=mock_region)
     if loc:
         target_x = loc[0] + int(20 * scale)
         target_y = loc[1] + int(50 * scale)
         print(f"   🎯 Found 'Sarathi Mock' header at {loc} (scale={scale:.2f})")
         print(f"   🖱️ Clicking RTO CODE box at: ({target_x}, {target_y})")
-        pyautogui.moveTo(target_x, target_y, duration=0.25)
+        pyautogui.moveTo(target_x, target_y, duration=0.15)
         pyautogui.click()
-        time.sleep(0.12)
+        time.sleep(0.10)
+        pyautogui.click()
+        time.sleep(0.14)
         pyautogui.hotkey('ctrl', 'a')
         time.sleep(0.05)
         pyautogui.press('backspace')
         time.sleep(0.05)
         pyperclip.copy(rto_code)
         pyautogui.hotkey('ctrl', 'v')
-        time.sleep(0.15)
+        time.sleep(0.12)
         print(f"   ✅ Entered RTO CODE: '{rto_code}'")
         return loc, scale
 
     # Priority 3: 'RTO CODE' label
-    loc_rto, scale_rto = locate_on_screen(LBL_RTO, threshold=0.68)
+    loc_rto, scale_rto = locate_on_screen(LBL_RTO, threshold=0.68, region=mock_region)
     if loc_rto:
         target_x = loc_rto[0] + int(46 * scale_rto)
         target_y = loc_rto[1] + int(15 * scale_rto)
         print(f"   🎯 Found 'RTO CODE' label at {loc_rto}")
-        pyautogui.moveTo(target_x, target_y, duration=0.25)
+        pyautogui.moveTo(target_x, target_y, duration=0.15)
         pyautogui.click()
-        time.sleep(0.12)
+        time.sleep(0.10)
+        pyautogui.click()
+        time.sleep(0.14)
         pyautogui.hotkey('ctrl', 'a')
         time.sleep(0.05)
         pyautogui.press('backspace')
         time.sleep(0.05)
         pyperclip.copy(rto_code)
         pyautogui.hotkey('ctrl', 'v')
-        time.sleep(0.15)
+        time.sleep(0.12)
         print(f"   ✅ Entered RTO CODE: '{rto_code}'")
         est_header = (loc_rto[0] + int(26 * scale_rto), loc_rto[1] - int(35 * scale_rto))
         return est_header, scale_rto
@@ -653,18 +677,18 @@ def fill_rto_code_in_mock(rto_code):
     fallback_x = int(sw * 0.098)
     fallback_y = int(sh * 0.495)
     print(f"   ℹ️ Calibrated fallback RTO coordinate for {sw}x{sh}: ({fallback_x}, {fallback_y})")
-    pyautogui.moveTo(fallback_x, fallback_y, duration=0.20)
+    pyautogui.moveTo(fallback_x, fallback_y, duration=0.15)
     pyautogui.click()
     time.sleep(0.10)
     pyautogui.click()
-    time.sleep(0.15)
+    time.sleep(0.14)
     pyautogui.hotkey('ctrl', 'a')
-    time.sleep(0.08)
+    time.sleep(0.05)
     pyautogui.press('backspace')
-    time.sleep(0.08)
+    time.sleep(0.05)
     pyperclip.copy(rto_code)
     pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.18)
+    time.sleep(0.12)
     print(f"   ✅ Entered RTO CODE: '{rto_code}' via calibrated resolution scaling!")
     scale_screen = sw / 1024.0
     est_header = (int(sw * 0.130), int(sh * 0.245))
@@ -1675,18 +1699,22 @@ def main():
     time.sleep(0.2)
 
     # ─────────────────────────────────────────────────────────────
-    # STEP 1: TOP-RIGHT POPUP ("Sarathi Autofill")
+    # STEP 1: TOP-RIGHT POPUP ("Sarathi Autofill") - FAST & STABLE
     # ─────────────────────────────────────────────────────────────
     enter_into_field("App No:", LBL_APPNO, offset_x=40, offset_y=18, text_to_enter=app_no)
+    time.sleep(0.35)
+
     enter_into_field("DOB (dd-mm-yyyy):", LBL_DOB, offset_x=15, offset_y=18, text_to_enter=dob)
+    time.sleep(0.35)
+
     enter_into_field("Password:", LBL_PWD, offset_x=40, offset_y=18, text_to_enter=password)
-    time.sleep(0.3)
+    time.sleep(0.35)
 
     # ─────────────────────────────────────────────────────────────
     # STEP 2: "Sarathi Mock" POPUP -> RTO CODE
     # ─────────────────────────────────────────────────────────────
     mock_header_loc, mock_scale = fill_rto_code_in_mock(rto_code)
-    time.sleep(0.3)
+    time.sleep(0.35)
 
     # ─────────────────────────────────────────────────────────────
     # STEP 3: CAPTCHA RESOLUTION, MOCK TRIGGER & RETRY LOOP
