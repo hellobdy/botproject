@@ -1682,7 +1682,10 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
     const stateSelect = page.locator('select').first();
     await stateSelect.waitFor({ state: 'visible', timeout: 15000 });
     try {
-      await stateSelect.selectOption({ label: state });
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+        stateSelect.selectOption({ label: state })
+      ]);
     } catch (_) {
       const selected = await page.evaluate((targetState) => {
         const select = document.querySelector('select');
@@ -1699,53 +1702,50 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       if (!selected) {
         await stateSelect.selectOption({ index: 1 });
       }
+      await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     }
-    await sleep(3500);
+    await sleep(2000);
 
     // 4. Dismiss secondary popup (cut / close modal)
     console.log('4️⃣ Dismissing secondary modal (Cut popup)...');
-    const closeBtn = page.locator('#contactless_statepopup .popupclose, #contactless_statepopup button[data-dismiss="modal"], .popupclose').first();
-    if (await closeBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
-      await closeBtn.click({ force: true });
-    } else {
-      await page.evaluate(() => {
-        const el = document.querySelector('#contactless_statepopup .popupclose') || document.querySelector('.popupclose') || document.querySelector('[data-dismiss="modal"]');
-        if (el) el.click();
-      });
+    const closeBtn = page.locator('#contactless_statepopup button.popupclose, #contactless_statepopup .close, button[data-dismiss="modal"], .popupclose').first();
+    if (await closeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await closeBtn.click().catch(() => {});
+      await sleep(1000);
     }
+
+    await page.evaluate(() => {
+      const popup = document.querySelector('#contactless_statepopup, .modal.in, .modal.show');
+      if (popup) {
+        const btn = popup.querySelector('button.popupclose, .close, [data-dismiss="modal"]');
+        if (btn) btn.click();
+        if (window.$ && typeof window.$.fn?.modal === 'function') {
+          try { window.$('#contactless_statepopup, .modal').modal('hide'); } catch (_) {}
+        }
+        popup.style.display = 'none';
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        document.body.classList.remove('modal-open');
+      }
+    }).catch(() => {});
     await page.keyboard.press('Escape');
-    await sleep(2000);
+    await sleep(1000);
 
     // 5. Navbar "Others" (cut karne ke baad Others pe click)
     console.log('5️⃣ Navigating to Others menu...');
     const othersNav = page.locator('li.nav-item.dropdown:has(a[href*="relatedAppln.do"]) > a, a.nav-link:has-text("Others")').first();
     await othersNav.waitFor({ state: 'visible', timeout: 15000 });
-    await othersNav.click({ force: true });
+    await othersNav.click();
     await sleep(1000);
 
     // 6. "Search Related Applications"
     console.log('6️⃣ Opening Search Related Applications...');
     const searchRelatedLink = page.locator('a[href*="relatedAppln.do"]').first();
-    try {
-      if (await searchRelatedLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await Promise.all([
-          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
-          searchRelatedLink.click({ force: true })
-        ]);
-      } else {
-        await Promise.all([
-          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
-          page.evaluate(() => {
-            const link = document.querySelector('a[href*="relatedAppln.do"]');
-            if (link) link.click();
-            else window.location.href = 'relatedAppln.do';
-          })
-        ]);
-      }
-    } catch (_) {
-      await page.goto('https://sarathi.parivahan.gov.in/sarathiservice/relatedAppln.do', { waitUntil: 'domcontentloaded' });
-    }
-    await sleep(2000);
+    await searchRelatedLink.waitFor({ state: 'visible', timeout: 10000 });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
+      searchRelatedLink.click()
+    ]);
+    await sleep(1500);
 
     // 7. Search Criteria -> Appl No
     console.log('7️⃣ Selecting Appl No...');
