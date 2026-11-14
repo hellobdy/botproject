@@ -1556,10 +1556,11 @@ async function executeStage2(state, appNo, dob, userPassword, derivedRtoCode, su
   console.log('🎉 Step 2 Complete!\n');
 }
 
-// ───────── STAGE 1 TOGGLE (DEV TESTING) ─────────
+// ───────── WORKFLOW TOGGLES ─────────
 // Set to true to bypass Stage 1 (photo download) and test Stage 2 directly
-// Set to false to run the complete end-to-end flow with photo download
 const SKIP_STAGE_1 = false;
+// Set to false: only Step 1 runs (photo download & details save), Step 2 is disabled
+const ENABLE_STAGE_2 = false;
 
 async function runSarathiSearch(chatId, userName, state, appNo, dob, password = '', rtoCodeOverride = '', subId = null) {
   isProcessing = true;
@@ -1741,7 +1742,25 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       await capImg.waitFor({ state: 'visible', timeout: 10000 });
       await sleep(400);
 
-      const capBuffer = await capImg.screenshot();
+      let capBuffer = null;
+      try {
+        const box = await capImg.boundingBox();
+        if (box) {
+          const viewport = page.viewportSize() || { width: 1280, height: 800 };
+          const padX = 80;
+          const padY = 40;
+          const x = Math.max(0, Math.floor(box.x - padX));
+          const y = Math.max(0, Math.floor(box.y - padY));
+          const width = Math.min(viewport.width - x, Math.ceil(box.width + padX * 2));
+          const height = Math.min(viewport.height - y, Math.ceil(box.height + padY * 2));
+          capBuffer = await page.screenshot({ clip: { x, y, width, height } });
+        }
+      } catch (boxErr) {
+        console.warn('⚠️ Padded captcha capture fallback:', boxErr.message);
+      }
+      if (!capBuffer) {
+        capBuffer = await capImg.screenshot();
+      }
 
       console.log(`📲 Requesting captcha from Telegram user...`);
       const solution = await requestCaptchaFromUser(chatId, capBuffer, attempt);
@@ -1974,8 +1993,8 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
           `👨 <b>Father:</b> ${applicantInfo.fatherName || '—'}\n` +
           `🏢 <b>RTO Office:</b> ${applicantInfo.rto || '—'}\n` +
           `🏷️ <b>RTO Code:</b> <code>${derivedRtoCode || '—'}</code>\n\n` +
-          `💾 <b>Photo Saved:</b> <code>${photoFileName}</code> in Downloads!\n\n` +
-          `🚀 <b>Step 2:</b> Opening Obscura Files Chrome...`;
+          `💾 <b>Photo Saved:</b> <code>${photoFileName}</code> (Downloads folder)!\n\n` +
+          `🎉 <b>Process Complete!</b>`;
         await sendTelegramPhoto(chatId, photoBuffer, msg, photoFileName).catch(() => {});
       }
     } else {
@@ -2005,20 +2024,24 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
     }
     console.log('🔒 Step 1 browser closed cleanly.');
 
-    // ───────── STEP 2: AUTOFILL & MOCK TRIGGER ON OBSCURA FILES CHROME ─────────
-    let userPassword = password;
-    if (!userPassword && subId) {
-      const rec = db.getById(subId);
-      if (rec && rec.password) userPassword = rec.password;
-    }
-    if (!userPassword) userPassword = '17760G';
+    if (ENABLE_STAGE_2) {
+      // ───────── STEP 2: AUTOFILL & MOCK TRIGGER ON OBSCURA FILES CHROME ─────────
+      let userPassword = password;
+      if (!userPassword && subId) {
+        const rec = db.getById(subId);
+        if (rec && rec.password) userPassword = rec.password;
+      }
+      if (!userPassword) userPassword = '17760G';
 
-    let finalRtoCode = derivedRtoCode;
-    if (!finalRtoCode || finalRtoCode === '—') {
-      finalRtoCode = await resolveRtoCode('', applicantInfo.rto, state);
-    }
+      let finalRtoCode = derivedRtoCode;
+      if (!finalRtoCode || finalRtoCode === '—') {
+        finalRtoCode = await resolveRtoCode('', applicantInfo.rto, state);
+      }
 
-    await executeStage2(state, appNo, dob, userPassword, finalRtoCode, subId, chatId);
+      await executeStage2(state, appNo, dob, userPassword, finalRtoCode, subId, chatId);
+    } else {
+      console.log('🏁 Step 1 finished! (Step 2 is disabled). Photo successfully saved to Downloads.\n');
+    }
 
   } catch (err) {
     console.error('❌ Error during process:', err);
