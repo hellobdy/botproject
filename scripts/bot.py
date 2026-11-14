@@ -12,12 +12,26 @@ import cv2
 import pyautogui
 import pygetwindow as gw
 import pyperclip
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 # Safety settings
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.2
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+BOT_TOKEN = "9080473114:AAGkJD4CeZjjmY1KXW0Cm9BhRQB8J51J6NU"
+TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
+DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
+if not os.path.exists(DATA_DIR):
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+    except Exception:
+        DATA_DIR = SCRIPT_DIR
 
 DEFAULT_GEMINI_KEY = base64.b64decode("QVEuQWI4Uk42S05SdXpmTUVqMHAwSnZIbTZzTFMyc1JYT2Y4Wmd4UktyVy1BN0lkUDdjNmc=").decode("utf-8")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
@@ -96,6 +110,197 @@ def smart_parse_args():
         if len(args) >= 4: rto_code = args[3]
 
     return state, app_no, dob, password, rto_code
+
+def get_target_chat_id():
+    """Gets user chatId from environment, CLI args, or last database record."""
+    env_chat = os.environ.get("TELEGRAM_CHAT_ID")
+    if env_chat and env_chat.strip() and env_chat.strip() != 'TERMINAL':
+        return env_chat.strip()
+
+    args = sys.argv[1:]
+    if args:
+        last_arg = args[-1].strip()
+        if last_arg.isdigit() and len(last_arg) >= 8 and last_arg != 'TERMINAL':
+            return last_arg
+
+    sub_file = os.path.join(DATA_DIR, "submissions.json")
+    if os.path.exists(sub_file):
+        try:
+            with open(sub_file, "r", encoding="utf-8") as f:
+                records = json.load(f)
+                for r in reversed(records):
+                    c_id = r.get("chatId")
+                    if c_id and str(c_id) != 'TERMINAL':
+                        return str(c_id)
+        except Exception:
+            pass
+
+    return "8246537527"
+
+def request_step2_captcha_from_user(crop_cap, attempt=1, target_chat_id=None):
+    """
+    Sends the Step 2 mock captcha crop to user on Telegram and waits for their reply.
+    Supports:
+    1. Node.js bridge (when running via bot.js)
+    2. Direct Telegram API (when running standalone python)
+    3. Non-blocking terminal keyboard input (fallback)
+    """
+    if crop_cap is None or crop_cap.size == 0:
+        return None
+
+    chat_id = target_chat_id or get_target_chat_id()
+    img_path = os.path.join(DATA_DIR, "step2_captcha.png")
+    cv2.imwrite(img_path, crop_cap)
+
+    req_file = os.path.join(DATA_DIR, "step2_captcha_req.json")
+    res_file = os.path.join(DATA_DIR, "step2_captcha_res.json")
+
+    # Clean old response if any
+    if os.path.exists(res_file):
+        try: os.remove(res_file)
+        except Exception: pass
+
+    # Write request for Node.js bridge
+    req_data = {
+        "status": "PENDING",
+        "imagePath": img_path,
+        "attempt": attempt,
+        "chatId": chat_id,
+        "timestamp": time.time()
+    }
+    try:
+        with open(req_file, "w", encoding="utf-8") as f:
+            json.dump(req_data, f)
+    except Exception as e:
+        print(f"   ⚠️ Bridge request write note: {e}")
+
+    print(f"\n📲 Requesting Step 2 Captcha from Telegram (Chat: {chat_id}, Attempt: {attempt})...")
+
+    # Wait up to 2.5 seconds to see if Node bridge picks it up
+    is_node_running = False
+    t_start = time.time()
+    while time.time() - t_start < 2.5:
+        if os.environ.get("RUN_FROM_NODE") == "1":
+            is_node_running = True
+            break
+        if os.path.exists(req_file):
+            try:
+                with open(req_file, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    if d.get("status") == "PROCESSING":
+                        is_node_running = True
+                        break
+            except Exception:
+                pass
+        time.sleep(0.2)
+
+    # If Node.js is NOT handling it, Python sends it to Telegram directly!
+    if not is_node_running:
+        print("   ℹ️ Node bridge not detected; sending photo directly via Telegram Bot API...")
+        caption = (
+            f"📸 <b>Step 2 (Sarathi Mock) Verification Code</b>\n\nKripya is photo ka captcha likh kar reply karein:"
+            if attempt == 1 else
+            f"⚠️ <b>Incorrect Captcha (Attempt {attempt}/5)</b>\n\nNaya captcha refresh hua hai. Kripya sahi captcha likh kar reply karein:"
+        )
+        try:
+            with open(img_path, "rb") as f_img:
+                files = {"photo": ("step2_captcha.png", f_img, "image/png")}
+                data = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}
+                resp = requests.post(f"{TELEGRAM_API}/sendPhoto", data=data, files=files, timeout=12)
+                if resp.status_code == 200:
+                    print("   ✅ Photo sent to Telegram successfully!")
+                else:
+                    print(f"   ⚠️ Telegram sendPhoto response: {resp.text}")
+        except Exception as e:
+            print(f"   ⚠️ Direct Telegram send error: {e}")
+
+    print("⏳ Waiting for captcha answer from Telegram (or type in terminal)...")
+
+    # Polling loop (checks bridge res_file OR Telegram getUpdates, plus optional terminal input)
+    last_update_id = 0
+    if not is_node_running:
+        try:
+            up_resp = requests.get(f"{TELEGRAM_API}/getUpdates", params={"limit": 5}, timeout=5).json()
+            if up_resp.get("ok") and up_resp.get("result"):
+                last_update_id = up_resp["result"][-1]["update_id"]
+        except Exception:
+            pass
+
+    start_wait = time.time()
+    typed_chars = []
+
+    while time.time() - start_wait < 120:
+        # 1. Check if Node.js bridge wrote the response
+        if os.path.exists(res_file):
+            try:
+                with open(res_file, "r", encoding="utf-8") as f:
+                    res_data = json.load(f)
+                captcha_text = res_data.get("captcha", "").strip()
+                if captcha_text:
+                    print(f"\n🎯 Step 2 Captcha received via Telegram: '{captcha_text}'")
+                    try: os.remove(res_file)
+                    except Exception: pass
+                    try:
+                        if os.path.exists(req_file): os.remove(req_file)
+                    except Exception: pass
+                    return captcha_text
+            except Exception:
+                pass
+
+        # 2. If running standalone, poll Telegram getUpdates
+        if not is_node_running:
+            try:
+                resp = requests.get(
+                    f"{TELEGRAM_API}/getUpdates",
+                    params={"offset": last_update_id + 1, "timeout": 1},
+                    timeout=4
+                )
+                if resp.status_code == 200:
+                    d = resp.json()
+                    if d.get("ok") and d.get("result"):
+                        for item in d["result"]:
+                            last_update_id = item["update_id"]
+                            msg = item.get("message")
+                            if msg and str(msg.get("chat", {}).get("id")) == str(chat_id):
+                                text = msg.get("text", "").strip()
+                                if text:
+                                    print(f"\n🎯 Direct Telegram captcha received from user: '{text}'")
+                                    try:
+                                        requests.post(
+                                            f"{TELEGRAM_API}/sendMessage",
+                                            json={
+                                                "chat_id": chat_id,
+                                                "text": f"✅ Captcha received: <code>{text}</code>\nSubmitting in Obscura Files Chrome...",
+                                                "parse_mode": "HTML"
+                                            },
+                                            timeout=5
+                                        )
+                                    except Exception:
+                                        pass
+                                    return text
+            except Exception:
+                pass
+
+        # 3. Check non-blocking terminal keyboard input
+        if msvcrt and msvcrt.kbhit():
+            ch = msvcrt.getwche()
+            if ch in ('\r', '\n'):
+                print()
+                val = "".join(typed_chars).strip()
+                if val:
+                    print(f"✅ Terminal captcha input received: '{val}'")
+                    return val
+                typed_chars = []
+            elif ch == '\x08': # backspace
+                if typed_chars:
+                    typed_chars.pop()
+            elif ord(ch) >= 32:
+                typed_chars.append(ch)
+
+        time.sleep(0.25)
+
+    print("\n⚠️ Captcha input timed out after 120 seconds.")
+    return None
 
 def solve_captcha_with_gemini(crop_bgr):
     """
@@ -814,8 +1019,8 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
                     crop_cap = screen_bgr[c_y1:c_y2, c_x1:c_x2]
                     if crop_cap.size > 0:
                         cv2.imwrite(os.path.join(SCRIPT_DIR, "debug_last_captcha_crop.png"), crop_cap)
-                        print(f"   📸 Fresh captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
-                        solved_captcha = solve_captcha_with_gemini(crop_cap)
+                        print(f"   📸 Fresh captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}). Requesting Telegram resolution...")
+                        solved_captcha = request_step2_captcha_from_user(crop_cap, attempt=attempt)
             except Exception as e:
                 print(f"   ⚠️ Captcha capture error: {e}")
         else:
@@ -831,8 +1036,8 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
                     crop_cap = screen_bgr[c_y1:c_y2, c_x1:c_x2]
                     if crop_cap.size > 0:
                         cv2.imwrite(os.path.join(SCRIPT_DIR, "debug_last_captcha_crop.png"), crop_cap)
-                        print(f"   📸 Calibrated fallback captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
-                        solved_captcha = solve_captcha_with_gemini(crop_cap)
+                        print(f"   📸 Calibrated fallback captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}). Requesting Telegram resolution...")
+                        solved_captcha = request_step2_captcha_from_user(crop_cap, attempt=attempt)
             except Exception as e:
                 print(f"   ⚠️ Captcha capture fallback error: {e}")
 
@@ -855,7 +1060,7 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
             time.sleep(0.15)
             print("   ✅ Captcha entered successfully!")
         else:
-            print("   ⚠️ Gemini AI couldn't auto-resolve captcha. Please enter manually:")
+            print("   ⚠️ Telegram se captcha nahi mila. Please enter manually:")
             try:
                 user_captcha = input("👉 Captcha likhein (ya bas Enter dabayein): ").strip()
             except Exception:

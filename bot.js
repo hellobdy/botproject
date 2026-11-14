@@ -776,6 +776,7 @@ async function executeStage2(state, appNo, dob, userPassword, derivedRtoCode, su
   console.log('='.repeat(60) + '\n');
 
   const pythonScript = path.join(__dirname, 'scripts', 'bot.py');
+  const targetChatId = (chatId && chatId !== 'TERMINAL') ? String(chatId) : String(lastActiveChatId || '8246537527');
 
   const pyArgs = [
     pythonScript,
@@ -783,16 +784,114 @@ async function executeStage2(state, appNo, dob, userPassword, derivedRtoCode, su
     appNo,
     dob,
     userPassword || '17760G',
-    derivedRtoCode || 'AS04'
+    derivedRtoCode || 'AS04',
+    targetChatId
   ];
 
-  console.log(`   Executing: python "${pythonScript}" "${state || 'Assam'}" "${appNo}" "${dob}" "${userPassword || '17760G'}" "${derivedRtoCode || 'AS04'}"\n`);
+  console.log(`   Executing: python "${pythonScript}" "${state || 'Assam'}" "${appNo}" "${dob}" "${userPassword || '17760G'}" "${derivedRtoCode || 'AS04'}" "${targetChatId}"\n`);
+
+  const DATA_DIR = path.join(__dirname, 'data');
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  const reqFile = path.join(DATA_DIR, 'step2_captcha_req.json');
+  const resFile = path.join(DATA_DIR, 'step2_captcha_res.json');
+
+  // Clean old bridge files before starting
+  try { if (fs.existsSync(reqFile)) fs.unlinkSync(reqFile); } catch (_) {}
+  try { if (fs.existsSync(resFile)) fs.unlinkSync(resFile); } catch (_) {}
+
+  let bridgeActive = true;
+  const bridgeLoop = async () => {
+    while (bridgeActive) {
+      try {
+        if (fs.existsSync(reqFile)) {
+          let reqData = null;
+          try {
+            const raw = fs.readFileSync(reqFile, 'utf8');
+            reqData = JSON.parse(raw);
+          } catch (_) {}
+
+          if (reqData && reqData.status === 'PENDING') {
+            reqData.status = 'PROCESSING';
+            try {
+              fs.writeFileSync(reqFile, JSON.stringify(reqData));
+            } catch (_) {}
+
+            console.log(`\n📲 Step 2 Captcha Request from Python (Attempt ${reqData.attempt || 1})!`);
+            let imgBuffer = null;
+            const imgPath = reqData.imagePath || path.join(DATA_DIR, 'step2_captcha.png');
+            if (fs.existsSync(imgPath)) {
+              imgBuffer = fs.readFileSync(imgPath);
+            }
+
+            if (imgBuffer && targetChatId) {
+              const attempt = reqData.attempt || 1;
+              const caption = attempt === 1
+                ? `📸 <b>Step 2 (Sarathi Mock) Verification Code</b>\n\nKripya is photo ka captcha likh kar reply karein:`
+                : `⚠️ <b>Incorrect Captcha (Attempt ${attempt}/5)</b>\n\nNaya captcha refresh hua hai. Kripya sahi captcha likh kar reply karein:`;
+
+              console.log(`📲 Sending Step 2 captcha photo to Telegram (Chat: ${targetChatId})...`);
+              await sendTelegramPhoto(targetChatId, imgBuffer, caption, 'step2_captcha.png').catch((e) => {
+                console.error('Failed to send Step 2 photo to Telegram:', e.message);
+              });
+
+              await new Promise((resolveCaptcha) => {
+                let finished = false;
+                const timer = setTimeout(() => {
+                  if (!finished) {
+                    finished = true;
+                    activeCaptchaResolver = null;
+                    activeCaptchaChatId = null;
+                    console.warn('⚠️ Step 2 Captcha timed out on Telegram after 120s.');
+                    resolveCaptcha(null);
+                  }
+                }, 120000);
+
+                activeCaptchaChatId = targetChatId;
+                activeCaptchaResolver = (ans) => {
+                  if (!finished) {
+                    finished = true;
+                    clearTimeout(timer);
+                    activeCaptchaResolver = null;
+                    activeCaptchaChatId = null;
+                    try {
+                      fs.writeFileSync(resFile, JSON.stringify({
+                        status: 'DONE',
+                        captcha: (ans || '').trim(),
+                        timestamp: Date.now()
+                      }));
+                      if (fs.existsSync(reqFile)) fs.unlinkSync(reqFile);
+                    } catch (e) {
+                      console.error('Error writing resFile:', e.message);
+                    }
+                    resolveCaptcha(ans);
+                  }
+                };
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // ignore concurrency errors
+      }
+      await sleep(250);
+    }
+  };
+
+  const bridgePromise = bridgeLoop();
 
   const { spawn } = require('child_process');
   await new Promise((resolve) => {
     const pyProc = spawn('python', pyArgs, {
       cwd: path.dirname(pythonScript),
-      stdio: 'inherit'
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        RUN_FROM_NODE: '1',
+        TELEGRAM_CHAT_ID: targetChatId
+      }
     });
     pyProc.on('close', (code) => {
       console.log(`\n🤖 Step 2 finished with exit code ${code}`);
@@ -804,15 +903,20 @@ async function executeStage2(state, appNo, dob, userPassword, derivedRtoCode, su
     });
   });
 
+  bridgeActive = false;
+  await bridgePromise.catch(() => {});
+  try { if (fs.existsSync(reqFile)) fs.unlinkSync(reqFile); } catch (_) {}
+  try { if (fs.existsSync(resFile)) fs.unlinkSync(resFile); } catch (_) {}
+
   if (subId) {
     db.update(subId, {
       status: 'COMPLETED'
     });
   }
 
-  if (chatId) {
+  if (targetChatId) {
     await sendTelegramMessage(
-      chatId,
+      targetChatId,
       `🎉 <b>Photo Upload Complete!</b>\n\n` +
       `Obscura Files Chrome me aapka form fill ho gaya hai, RTO mock captcha trigger ho gaya hai aur <b>Photo (Photo_${appNo}.jpg)</b> upload ho chuki hai!\n\n` +
       `👉 Ab aap Camera aur FaceAuth aage manually complete karein.`
@@ -1380,13 +1484,13 @@ async function startBot() {
 
         lastActiveChatId = chatId;
 
-        // Check 0: Is the bot waiting for a Step 1 Captcha answer from Telegram?
+        // Check 0: Is the bot waiting for a Captcha answer from Telegram (Step 1 or Step 2)?
         if (activeCaptchaResolver && (!activeCaptchaChatId || activeCaptchaChatId === chatId)) {
           const resolver = activeCaptchaResolver;
           activeCaptchaResolver = null;
           activeCaptchaChatId = null;
-          console.log(`\n🎯 Step 1 Captcha received from Telegram [${userName} (${chatId})]: "${text}"`);
-          await sendTelegramMessage(chatId, `✅ Captcha received: <code>${text}</code>\nSubmitting to Sarathi portal...`);
+          console.log(`\n🎯 Captcha received from Telegram [${userName} (${chatId})]: "${text}"`);
+          await sendTelegramMessage(chatId, `✅ Captcha received: <code>${text}</code>\nSubmitting...`);
           resolver(text);
           continue;
         }
