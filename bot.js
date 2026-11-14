@@ -159,6 +159,73 @@ async function sendTelegramPhoto(chatId, photoBuffer, caption, filename = 'captc
 }
 
 // ───────── GEMINI AI CAPTCHA SOLVER ─────────
+// ───────── HUMAN CAPTCHA RESOLUTION VIA TELEGRAM ─────────
+let activeCaptchaResolver = null;
+let activeCaptchaChatId = null;
+let lastActiveChatId = '8246537527';
+let isBotRunning = false;
+
+try {
+  const allRecs = db.getAll();
+  const lastUser = allRecs.find(x => x.chatId && x.chatId !== 'TERMINAL');
+  if (lastUser && lastUser.chatId) {
+    lastActiveChatId = String(lastUser.chatId);
+  }
+} catch (_) {}
+
+async function requestCaptchaFromUser(chatId, capBuffer, attempt = 1) {
+  const targetChatId = chatId || lastActiveChatId || '8246537527';
+
+  const caption = attempt === 1
+    ? `📸 <b>Step 1 Verification Code</b>\n\nKripya is photo ka captcha likh kar reply karein:`
+    : `⚠️ <b>Incorrect Captcha (Attempt ${attempt}/5)</b>\n\nNaya captcha refresh hua hai. Kripya sahi captcha likh kar reply karein:`;
+
+  console.log(`\n📲 Sending Step 1 captcha image to Telegram (Chat: ${targetChatId})...`);
+  if (targetChatId) {
+    await sendTelegramPhoto(targetChatId, capBuffer, caption, 'step1_captcha.png').catch((e) => {
+      console.error('Failed to send photo to Telegram:', e.message);
+    });
+  }
+
+  console.log('⏳ Waiting for captcha answer from Telegram (or type in terminal)...');
+
+  return new Promise((resolve) => {
+    let timeoutId = null;
+
+    const cleanupAndResolve = (answer) => {
+      if (timeoutId) clearTimeout(timeoutId);
+      activeCaptchaResolver = null;
+      activeCaptchaChatId = null;
+      resolve(answer);
+    };
+
+    activeCaptchaResolver = cleanupAndResolve;
+    activeCaptchaChatId = targetChatId;
+
+    // Timeout after 120 seconds if no answer
+    timeoutId = setTimeout(() => {
+      if (activeCaptchaResolver === cleanupAndResolve) {
+        console.warn('⚠️ Captcha input timed out after 120 seconds.');
+        cleanupAndResolve(null);
+      }
+    }, 120000);
+
+    // Terminal fallback input (if run interactively in terminal)
+    if (process.stdin.isTTY) {
+      const readline = require('readline');
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question('👉 Terminal Captcha Input (ya Telegram pe reply karein): ', (answer) => {
+        rl.close();
+        if (activeCaptchaResolver === cleanupAndResolve) {
+          const cleaned = (answer || '').trim();
+          console.log(`✅ Terminal captcha input received: "${cleaned}"`);
+          cleanupAndResolve(cleaned);
+        }
+      });
+    }
+  });
+}
+
 async function solveCaptchaWithGemini(photoBufferOrBase64) {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'PASTE_YOUR_GEMINI_API_KEY_HERE') {
     console.error('❌ Gemini API key is missing! Please paste your Gemini API key in bot.js at GEMINI_API_KEY.');
@@ -932,44 +999,21 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
     await dobInput.fill(dob);
     await sleep(1000);
 
-    // 10. Automated Captcha Resolution via Gemini AI (with auto-retry up to 5 attempts)
+    // 10. Human Captcha Resolution via Telegram (User solves, bot enters & submits)
     let solvedSuccessfully = false;
     for (let attempt = 1; attempt <= 5; attempt++) {
       console.log(`🔟 Capturing security code image (#capimg) - Attempt ${attempt}/5...`);
       const capImg = page.locator('#capimg');
       await capImg.waitFor({ state: 'visible', timeout: 10000 });
+      await sleep(400);
 
-      // 3x High-Resolution Upscale & Noise Smoothing directly via Browser Canvas
-      let capData = await page.evaluate(() => {
-        try {
-          const img = document.querySelector('#capimg');
-          if (!img) return null;
-          const w = img.naturalWidth || img.width || 120;
-          const h = img.naturalHeight || img.height || 35;
-          const scale = 3;
-          const canvas = document.createElement('canvas');
-          canvas.width = w * scale;
-          canvas.height = h * scale;
-          const ctx = canvas.getContext('2d');
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          return canvas.toDataURL('image/png').replace(/^data:image\/\w+;base64,/, '');
-        } catch (_) {
-          return null;
-        }
-      });
+      const capBuffer = await capImg.screenshot();
 
-      if (!capData) {
-        const capBuffer = await capImg.screenshot();
-        capData = capBuffer.toString('base64');
-      }
-
-      console.log('🤖 Auto-decoding verification code with Gemini AI (3x High-Resolution Upscaled)...');
-      const solution = await solveCaptchaWithGemini(capData);
+      console.log(`📲 Requesting captcha from Telegram user...`);
+      const solution = await requestCaptchaFromUser(chatId, capBuffer, attempt);
 
       if (!solution) {
-        console.log(`⚠️ Gemini AI response issue on attempt ${attempt}/5. Retrying with fresh code...`);
+        console.log(`⚠️ Captcha input empty or timed out on attempt ${attempt}/5. Retrying with fresh code...`);
         const refreshBtn = page.locator('#reload, a[onclick*="refresh" i], img[title*="Refresh" i]').first();
         if (await refreshBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
           await refreshBtn.click();
@@ -978,7 +1022,7 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
         continue;
       }
 
-      console.log(`✍️ Automatically entering code: "${solution}"`);
+      console.log(`✍️ Automatically entering code into portal: "${solution}"`);
       const capInput = page.locator('#captxt');
       await capInput.fill(solution);
       await sleep(500);
@@ -995,6 +1039,9 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
 
       if (hasResults) {
         console.log('   ✅ Application details loaded successfully!');
+        if (chatId || lastActiveChatId) {
+          await sendTelegramMessage(chatId || lastActiveChatId, '🎉 <b>Step 1 Captcha Matched!</b>\nApplication details & photo successfully loaded.');
+        }
         solvedSuccessfully = true;
         break;
       }
@@ -1264,6 +1311,9 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
 
 // ───────── MAIN TELEGRAM POLLING LOOP ─────────
 async function startBot() {
+  if (isBotRunning) return;
+  isBotRunning = true;
+
   console.log('🤖 Professional Telegram Bot Service Running...');
   console.log(`   Token: ${BOT_TOKEN.substring(0, 15)}...`);
   console.log(`   Local Downloads Folder: ${getDownloadsDir()}`);
@@ -1327,6 +1377,19 @@ async function startBot() {
         const chatId = String(update.message.chat.id);
         const text = update.message.text.trim();
         const userName = update.message.from?.username ? `@${update.message.from.username}` : (update.message.from?.first_name || 'Customer');
+
+        lastActiveChatId = chatId;
+
+        // Check 0: Is the bot waiting for a Step 1 Captcha answer from Telegram?
+        if (activeCaptchaResolver && (!activeCaptchaChatId || activeCaptchaChatId === chatId)) {
+          const resolver = activeCaptchaResolver;
+          activeCaptchaResolver = null;
+          activeCaptchaChatId = null;
+          console.log(`\n🎯 Step 1 Captcha received from Telegram [${userName} (${chatId})]: "${text}"`);
+          await sendTelegramMessage(chatId, `✅ Captcha received: <code>${text}</code>\nSubmitting to Sarathi portal...`);
+          resolver(text);
+          continue;
+        }
 
         console.log(`📩 Message from [${userName} (${chatId})]: "${text}"`);
 
@@ -1487,41 +1550,44 @@ async function startBot() {
 
 // ───────── MAIN RUNNER (TERMINAL CLI ARGS OR TELEGRAM BOT) ─────────
 async function main() {
+  // Always start Telegram bot in background so it can listen for commands and user captcha responses
+  startBot().catch(err => console.error('Telegram bot polling error:', err));
+
   const cliArgs = process.argv.slice(2);
   if (cliArgs.length > 0) {
     const cliText = cliArgs.join(' ');
     const parsed = parseSingleLineInput(cliText);
     if (parsed) {
       console.log('\n' + '='.repeat(60));
-      console.log('⚡ DIRECT TERMINAL EXECUTION (NO TELEGRAM NEEDED)');
+      console.log('⚡ DIRECT TERMINAL EXECUTION (WITH TELEGRAM CAPTCHA INTEGRATION)');
       console.log('='.repeat(60));
       console.log(`• State:           ${parsed.state}`);
       console.log(`• Application No:  ${parsed.appNo}`);
       console.log(`• DOB:             ${parsed.dob}`);
       console.log(`• Password:        ${parsed.password}`);
-      console.log(`• RTO Code:        ${parsed.rtoCode}`);
+      console.log(`• RTO Code:        ${parsed.rtoCode || '(Extracted in Step 1)'}`);
+      console.log(`• Telegram Target: ${lastActiveChatId || 'Waiting for user'}`);
       console.log('='.repeat(60) + '\n');
 
       const record = db.create({
-        chatId: 'TERMINAL',
+        chatId: lastActiveChatId || 'TERMINAL',
         userName: 'TerminalUser',
         state: parsed.state,
         appNo: parsed.appNo,
         dob: parsed.dob,
         password: parsed.password,
-        rtoCode: parsed.rtoCode
+        rtoCode: parsed.rtoCode || '—'
       });
 
-      await runSarathiSearch(null, 'TerminalUser', parsed.state, parsed.appNo, parsed.dob, parsed.password, parsed.rtoCode, record.id);
+      await runSarathiSearch(lastActiveChatId, 'TerminalUser', parsed.state, parsed.appNo, parsed.dob, parsed.password, parsed.rtoCode, record.id);
+      console.log('\n🟢 Process completed! (Telegram bot still active in background, press Ctrl+C to exit)');
       return;
     } else {
       console.warn('\n⚠️ Could not parse command line arguments.');
-      console.warn('👉 Expected format: node bot.js Uttar Pradesh 5054900926 12-04-1998 BP53QE UP78');
+      console.warn('👉 Expected format: node bot.js RJ 5104276426 10-07-1994 JNSRNM');
       console.warn('Starting Telegram Bot polling instead...\n');
     }
   }
-
-  startBot();
 }
 
 main();
