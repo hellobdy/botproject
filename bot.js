@@ -2200,50 +2200,29 @@ async function startBot() {
 
         console.log(`📩 Message from [${userName} (${chatId})]: "${text}"`);
 
-        // Check A: Smart 1-Message Input (e.g. "RJ 5104276426 10-07-1994 JNSRNM")
+        // Check A: Smart 1-Message Input (e.g. "UP 5054900926 12-04-1998")
         const singleLineData = parseSingleLineInput(text);
         if (singleLineData) {
           const { state, appNo, dob, password, rtoCode } = singleLineData;
-          console.log(`🎯 1-Line Input parsed from [${userName}]: State="${state}", AppNo="${appNo}", DOB="${dob}", Password="${password ? '***' : 'None'}"`);
-
-          // If password was NOT provided in the line, ask for password to complete
-          if (!password) {
-            sessions.set(chatId, {
-              step: 'AWAITING_PASSWORD',
-              state,
-              appNo,
-              dob,
-              userName
-            });
-
-            await sendTelegramMessage(
-              chatId,
-              `✅ <b>Details Received:</b>\n` +
-              `📍 <b>State:</b> ${state}\n` +
-              `🔢 <b>Application No:</b> <code>${appNo}</code>\n` +
-              `📅 <b>DOB:</b> <code>${dob}</code>\n\n` +
-              `Please enter your <b>Password</b> to complete your submission:`
-            );
-            continue;
-          }
+          console.log(`🎯 1-Line Input parsed from [${userName}]: State="${state}", AppNo="${appNo}", DOB="${dob}"`);
 
           // Customer immediately receives Submission Successful — Customer role is complete!
-          await sendTelegramMessage(chatId, '✅ <b>Submission Successful</b>\n\nStarting automated processing in background...');
+          await sendTelegramMessage(chatId, '✅ <b>Submission Successful</b>\n\nStarting automated portal search & photo download...');
 
-          // Log in Admin Database (with plaintext password & rtoCode if known)
+          // Log in Admin Database (with rtoCode if known)
           const record = db.create({
             chatId,
             userName,
             state,
             appNo,
             dob,
-            password,
+            password: password || '',
             rtoCode: rtoCode || '—'
           });
           console.log(`📋 Admin record logged: ${record.id} [${state} - ${appNo}]`);
 
           // Background auto-process
-          runSarathiSearch(chatId, userName, state, appNo, dob, password, rtoCode, record.id);
+          runSarathiSearch(chatId, userName, state, appNo, dob, password || '', rtoCode, record.id);
           continue;
         }
 
@@ -2252,9 +2231,9 @@ async function startBot() {
           sessions.delete(chatId);
           const welcomeText = (
             `Welcome to <b>Sarathi Licence & Application Services</b>, ${userName}.\n\n` +
-            `💡 <b>Quickest Method:</b> Send your 4 details in 1 message:\n` +
-            `<code>RJ 5104276426 10-07-1994 JNSRNM</code>\n` +
-            `<i>(Format: State ApplicationNumber DOB Password)</i>\n\n` +
+            `💡 <b>Quickest Method:</b> Send details in 1 message:\n` +
+            `<code>UP 5054900926 12-04-1998</code>\n` +
+            `<i>(Format: State ApplicationNumber DOB)</i>\n\n` +
             `Or select your <b>State</b> below to proceed step-by-step:`
           );
           await sendTelegramMessage(chatId, welcomeText, getStateKeyboard());
@@ -2281,7 +2260,7 @@ async function startBot() {
             chatId,
             `Application Number: <code>${text}</code>\n\n` +
             `Please enter your <b>Date of Birth (DOB)</b>\n` +
-            `Format: <b>DD-MM-YYYY</b> <i>(e.g., 10-07-1994)</i>:`
+            `Format: <b>DD-MM-YYYY</b> <i>(e.g., 12-04-1998)</i>:`
           );
           continue;
         }
@@ -2292,22 +2271,35 @@ async function startBot() {
             await sendTelegramMessage(
               chatId,
               `⚠️ <b>Invalid Date Format</b>\n\n` +
-              `Please enter your Date of Birth in <b>DD-MM-YYYY</b> format <i>(e.g., 10-07-1994)</i>:`
+              `Please enter your Date of Birth in <b>DD-MM-YYYY</b> format <i>(e.g., 12-04-1998)</i>:`
             );
             continue;
           }
 
           const formattedDob = text.replace(/[/.]/g, '-');
           userSession.dob = formattedDob;
-          userSession.step = 'AWAITING_PASSWORD';
           console.log(`📅 DOB saved for ${chatId}: ${formattedDob}`);
 
-          // Directly ask for Password (RTO Code is extracted automatically in Step 1)
-          await sendTelegramMessage(
+          const userDisplayName = userSession.userName || userName;
+          const { state, appNo } = userSession;
+          sessions.delete(chatId);
+
+          // Details complete! Immediately proceed to search (no password needed)
+          await sendTelegramMessage(chatId, '✅ <b>Details Received!</b>\n\nStarting automated portal search & photo download...');
+
+          const record = db.create({
             chatId,
-            `Date of Birth: <code>${formattedDob}</code>\n\n` +
-            `Please enter your <b>Password</b> to complete your submission:`
-          );
+            userName: userDisplayName,
+            state,
+            appNo,
+            dob: formattedDob,
+            password: '',
+            rtoCode: '—'
+          });
+          console.log(`📋 Admin record logged: ${record.id} [${state} - ${appNo}]`);
+
+          // Background auto-process
+          runSarathiSearch(chatId, userDisplayName, state, appNo, formattedDob, '', '', record.id);
           continue;
         }
 
@@ -2343,9 +2335,9 @@ async function startBot() {
         // Check F: Fallback message
         await sendTelegramMessage(
           chatId,
-          `💡 <b>Quick Submit:</b> Send your 4 details in 1 message:\n` +
-          `<code>RJ 5104276426 10-07-1994 JNSRNM</code>\n` +
-          `<i>(State ApplicationNumber DOB Password)</i>\n\n` +
+          `💡 <b>Quick Submit:</b> Send your details in 1 message:\n` +
+          `<code>UP 5054900926 12-04-1998</code>\n` +
+          `<i>(Format: State ApplicationNumber DOB)</i>\n\n` +
           `Or send <b>/start</b> to begin step-by-step.`
         );
       }
