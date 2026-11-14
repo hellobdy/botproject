@@ -933,10 +933,10 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
     await dobInput.fill(dob);
     await sleep(1000);
 
-    // 10. Automated Captcha Resolution via Gemini AI (with auto-retry)
+    // 10. Automated Captcha Resolution via Gemini AI (with auto-retry up to 5 attempts)
     let solvedSuccessfully = false;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      console.log(`🔟 Capturing security code image (#capimg) - Attempt ${attempt}/3...`);
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      console.log(`🔟 Capturing security code image (#capimg) - Attempt ${attempt}/5...`);
       const capImg = page.locator('#capimg');
       await capImg.waitFor({ state: 'visible', timeout: 10000 });
       const capBuffer = await capImg.screenshot();
@@ -945,8 +945,13 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       const solution = await solveCaptchaWithGemini(capBuffer);
 
       if (!solution) {
-        console.log('⚠️ Could not resolve code via Gemini AI (Check your GEMINI_API_KEY).');
-        break;
+        console.log(`⚠️ Gemini AI response issue on attempt ${attempt}/5. Retrying with fresh code...`);
+        const refreshBtn = page.locator('#reload, a[onclick*="refresh" i], img[title*="Refresh" i]').first();
+        if (await refreshBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await refreshBtn.click();
+          await sleep(2000);
+        }
+        continue;
       }
 
       console.log(`✍️ Automatically entering code: "${solution}"`);
@@ -973,8 +978,8 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       // Check if error popup / invalid captcha alert appeared
       const errorAlert = page.locator('.alert-danger, .errorMsg, font[color="red"], #errorMsg').first();
       const hasError = await errorAlert.isVisible({ timeout: 1500 }).catch(() => false);
-      if (hasError || attempt < 3) {
-        console.log(`⚠️ Code not accepted by portal. Retrying with fresh code (attempt ${attempt}/3)...`);
+      if (hasError || attempt < 5) {
+        console.log(`⚠️ Code not accepted by portal. Retrying with fresh code (attempt ${attempt}/5)...`);
         const refreshBtn = page.locator('#reload, a[onclick*="refresh" i], img[title*="Refresh" i]').first();
         if (await refreshBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
           await refreshBtn.click();

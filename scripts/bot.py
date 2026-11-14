@@ -261,12 +261,17 @@ def get_obscura_profile_dir():
                 for p_dir, p_info in profiles.items():
                     if env_profile in p_info.get('name', '').lower() or env_profile == p_dir.lower():
                         return p_dir
-            # 2. Automatically check for 'testing' or 'obscura' profile
+            # 2. Priority 1: Check for 'testing' or 'test' profile
             for p_dir, p_info in profiles.items():
                 p_name = p_info.get('name', '').lower()
-                if 'testing' in p_name or 'obscura' in p_name:
+                if 'testing' in p_name or 'test' in p_name:
                     return p_dir
-            # 3. Fallback to first available profile
+            # 3. Priority 2: Check for 'obscura' profile
+            for p_dir, p_info in profiles.items():
+                p_name = p_info.get('name', '').lower()
+                if 'obscura' in p_name:
+                    return p_dir
+            # 4. Fallback to first available profile
             if profiles:
                 return list(profiles.keys())[0]
     except Exception:
@@ -995,33 +1000,8 @@ def ensure_page_ready():
     chrome_active = bring_chrome_to_front()
 
     if not chrome_active:
-        print("🖥️ 1. Windows button click kar rahe hain (Start Menu)...")
-        pyautogui.press('win')
-        time.sleep(0.8)
-
-        print("⌨️ 2. Windows Search me 'chrome' type kar rahe hain...")
-        pyautogui.write('chrome', interval=0.1)
-        time.sleep(0.8)
-
-        print("🚀 3. Enter press karke Chrome open kar rahe hain...")
-        pyautogui.press('enter')
-        time.sleep(2.5)
-
-        print("👤 4. Jo profile chahiye (Obscura Files) wo profile check aur open kar rahe hain...")
-        profile_selected = select_obscura_profile_if_picker_present()
-        if profile_selected:
-            print("   ✅ 'Obscura Files' profile card clicked successfully!")
-            time.sleep(2.0)
-
-        for _ in range(8):
-            if bring_chrome_to_front():
-                chrome_active = True
-                break
-            time.sleep(0.5)
-
-    if not chrome_active:
-        print("   ℹ️ Activating dedicated Obscura Files profile window directly...")
         profile_dir = get_obscura_profile_dir()
+        print(f"🚀 Direct Chrome launch kar rahe hain testing profile ke sath ({profile_dir})...")
         paths = [
             r'C:\Program Files\Google\Chrome\Application\chrome.exe',
             r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
@@ -1038,7 +1018,7 @@ def ensure_page_ready():
             ])
         except Exception:
             os.system(f'start "" "{chrome_exe}" --profile-directory="{profile_dir}" "{TARGET_URL}" --start-maximized')
-        time.sleep(3.0)
+        time.sleep(3.5)
         bring_chrome_to_front()
 
     # Ensure window is maximized
