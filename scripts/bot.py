@@ -169,6 +169,51 @@ def solve_captcha_with_gemini(crop_bgr):
             print(f"   ⚠️ Model {model} note: {e}")
     return None
 
+def take_screenshot_bgr():
+    """
+    Takes a screen capture returning a BGR numpy array.
+    Uses native Windows GDI (ctypes) first (0 dependencies, works even if Pillow/pyscreeze is missing),
+    with fallbacks to PIL and pyautogui.
+    """
+    try:
+        import ctypes
+        import struct
+        user32 = ctypes.windll.user32
+        gdi32 = ctypes.windll.gdi32
+        w = user32.GetSystemMetrics(0)
+        h = user32.GetSystemMetrics(1)
+        hdesktop = user32.GetDesktopWindow()
+        desktop_dc = user32.GetDC(hdesktop)
+        img_dc = gdi32.CreateCompatibleDC(desktop_dc)
+        mem_bitmap = gdi32.CreateCompatibleBitmap(desktop_dc, w, h)
+        gdi32.SelectObject(img_dc, mem_bitmap)
+        gdi32.BitBlt(img_dc, 0, 0, w, h, desktop_dc, 0, 0, 0x00CC0020)
+        bmp_info = ctypes.create_string_buffer(40)
+        struct.pack_into('<IiiHHIIiiII', bmp_info, 0, 40, w, -h, 1, 32, 0, 0, 0, 0, 0, 0)
+        buf = ctypes.create_string_buffer(w * h * 4)
+        gdi32.GetDIBits(img_dc, mem_bitmap, 0, h, buf, bmp_info, 0)
+        gdi32.DeleteObject(mem_bitmap)
+        gdi32.DeleteDC(img_dc)
+        user32.ReleaseDC(hdesktop, desktop_dc)
+        img = np.frombuffer(buf, dtype=np.uint8).reshape((h, w, 4))
+        return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+    except Exception:
+        pass
+
+    try:
+        from PIL import ImageGrab
+        shot = ImageGrab.grab()
+        return cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+    except Exception:
+        pass
+
+    try:
+        shot = pyautogui.screenshot()
+        return cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+    except Exception as e:
+        print(f"   ⚠️ Screen capture error: {e}")
+        return None
+
 def locate_on_screen(template_path, threshold=0.75):
     """
     ANY COMPUTER & RESOLUTION ADAPTIVE MATCHING:
@@ -182,11 +227,8 @@ def locate_on_screen(template_path, threshold=0.75):
         return None, 1.0
     th, tw = template.shape[:2]
 
-    try:
-        screenshot = pyautogui.screenshot()
-        screen = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-    except Exception as e:
-        print(f"   ⚠️ Screen capture error: {e}")
+    screen = take_screenshot_bgr()
+    if screen is None:
         return None, 1.0
 
     screen_h, screen_w = screen.shape[:2]
@@ -231,11 +273,11 @@ def enter_into_field(label_name, tpl_path, offset_x, offset_y, text_to_enter):
         # Calibrated fallback for 16:9 screen resolutions (e.g. 1920x1080 / 1366x768)
         lbl_lower = label_name.lower()
         if "app" in lbl_lower:
-            target_x, target_y = int(sw * 0.842), int(sh * 0.243)
+            target_x, target_y = int(sw * 0.873), int(sh * 0.262)
         elif "dob" in lbl_lower:
-            target_x, target_y = int(sw * 0.842), int(sh * 0.365)
+            target_x, target_y = int(sw * 0.873), int(sh * 0.349)
         elif "pwd" in lbl_lower or "pass" in lbl_lower:
-            target_x, target_y = int(sw * 0.842), int(sh * 0.486)
+            target_x, target_y = int(sw * 0.873), int(sh * 0.443)
         else:
             print(f"   ⚠️ '{label_name}' screen par nahi mila! Blind click nahi kiya.")
             return False
@@ -243,11 +285,15 @@ def enter_into_field(label_name, tpl_path, offset_x, offset_y, text_to_enter):
 
     # Clear any accidental full page selection first
     pyautogui.press('esc')
-    time.sleep(0.05)
+    time.sleep(0.08)
 
-    pyautogui.moveTo(target_x, target_y, duration=0.25)
+    # Click inside the box (double click ensures cursor focuses inside the input)
+    pyautogui.moveTo(target_x, target_y, duration=0.20)
     pyautogui.click()
-    time.sleep(0.20)
+    time.sleep(0.10)
+    pyautogui.click()
+    time.sleep(0.15)
+
     # Clear existing text inside the box
     pyautogui.hotkey('ctrl', 'a')
     time.sleep(0.08)
@@ -399,12 +445,14 @@ def fill_rto_code_in_mock(rto_code):
         return est_header, scale_rto
 
     # Priority 4: Calibrated screen resolution fallback (bottom-left Sarathi Mock RTO box)
-    fallback_x = int(sw * 0.132)
-    fallback_y = int(sh * 0.508)
+    fallback_x = int(sw * 0.098)
+    fallback_y = int(sh * 0.495)
     print(f"   ℹ️ Calibrated fallback RTO coordinate for {sw}x{sh}: ({fallback_x}, {fallback_y})")
-    pyautogui.moveTo(fallback_x, fallback_y, duration=0.25)
+    pyautogui.moveTo(fallback_x, fallback_y, duration=0.20)
     pyautogui.click()
-    time.sleep(0.18)
+    time.sleep(0.10)
+    pyautogui.click()
+    time.sleep(0.15)
     pyautogui.hotkey('ctrl', 'a')
     time.sleep(0.08)
     pyautogui.press('backspace')
@@ -552,10 +600,8 @@ def is_authenticate_screen_ready(screen_bgr=None):
     Returns True if this interface is visible.
     """
     if screen_bgr is None:
-        try:
-            screenshot = pyautogui.screenshot()
-            screen_bgr = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-        except Exception:
+        screen_bgr = take_screenshot_bgr()
+        if screen_bgr is None:
             return False
 
     for tpl_path in [BTN_PROCEED, BTN_AUTHENTICATE]:
@@ -602,10 +648,8 @@ def handle_alerts_after_trigger(max_alerts=6):
 
     print("👀 Waiting for Alert Popup to appear after Apply & Trigger (up to 7s)...")
     while (time.time() - t_start) < 7.0:
-        try:
-            screenshot = pyautogui.screenshot()
-            screen = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-        except Exception:
+        screen = take_screenshot_bgr()
+        if screen is None:
             time.sleep(0.1)
             continue
 
@@ -642,10 +686,8 @@ def handle_alerts_after_trigger(max_alerts=6):
             found_sub = None
             t_sub = time.time()
             while (time.time() - t_sub) < 3.5:
-                try:
-                    shot = pyautogui.screenshot()
-                    scr = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
-                except Exception:
+                scr = take_screenshot_bgr()
+                if scr is None:
                     time.sleep(0.1)
                     continue
 
@@ -671,17 +713,14 @@ def handle_alerts_after_trigger(max_alerts=6):
     time.sleep(1.0)
 
     # Final safety check: ensure no popup is still lingering
-    try:
-        shot = pyautogui.screenshot()
-        scr = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+    scr = take_screenshot_bgr()
+    if scr is not None:
         lingering = is_alert_popup_present(scr, threshold=0.78)
         if lingering:
             print(f"   ⚠️ Lingering popup detected at {lingering[0]}! Clicking OK...")
             pyautogui.moveTo(lingering[0][0], lingering[0][1], duration=0.2)
             pyautogui.click()
             time.sleep(0.8)
-    except Exception:
-        pass
 
     # If captcha box is STILL on screen and no success popups appeared:
     loc_cap_still, _ = locate_on_screen(LBL_CAPTCHA, threshold=0.70)
@@ -709,10 +748,8 @@ def handle_alert_popups(max_alerts=3):
         detected_loc = None
 
         while (time.time() - t_start) < wait_time:
-            try:
-                screenshot = pyautogui.screenshot()
-                screen = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-            except Exception:
+            screen = take_screenshot_bgr()
+            if screen is None:
                 time.sleep(check_interval)
                 continue
 
@@ -772,30 +809,30 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
             c_y2 = min(sh, loc_cap[1] + int(17 * scale_cap))
 
             try:
-                screenshot = pyautogui.screenshot()
-                screen_bgr = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-                crop_cap = screen_bgr[c_y1:c_y2, c_x1:c_x2]
-                if crop_cap.size > 0:
-                    cv2.imwrite(os.path.join(SCRIPT_DIR, "debug_last_captcha_crop.png"), crop_cap)
-                    print(f"   📸 Fresh captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
-                    solved_captcha = solve_captcha_with_gemini(crop_cap)
+                screen_bgr = take_screenshot_bgr()
+                if screen_bgr is not None:
+                    crop_cap = screen_bgr[c_y1:c_y2, c_x1:c_x2]
+                    if crop_cap.size > 0:
+                        cv2.imwrite(os.path.join(SCRIPT_DIR, "debug_last_captcha_crop.png"), crop_cap)
+                        print(f"   📸 Fresh captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
+                        solved_captcha = solve_captcha_with_gemini(crop_cap)
             except Exception as e:
                 print(f"   ⚠️ Captcha capture error: {e}")
         else:
-            cap_box_x = int(sw * 0.459)
-            cap_box_y = int(sh * 0.486)
+            cap_box_x = int(sw * 0.449)
+            cap_box_y = int(sh * 0.484)
             try:
-                c_x1 = int(sw * 0.510)
-                c_x2 = int(sw * 0.605)
-                c_y1 = int(sh * 0.465)
-                c_y2 = int(sh * 0.515)
-                screenshot = pyautogui.screenshot()
-                screen_bgr = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-                crop_cap = screen_bgr[c_y1:c_y2, c_x1:c_x2]
-                if crop_cap.size > 0:
-                    cv2.imwrite(os.path.join(SCRIPT_DIR, "debug_last_captcha_crop.png"), crop_cap)
-                    print(f"   📸 Calibrated fallback captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
-                    solved_captcha = solve_captcha_with_gemini(crop_cap)
+                c_x1 = int(sw * 0.496)
+                c_x2 = int(sw * 0.591)
+                c_y1 = int(sh * 0.460)
+                c_y2 = int(sh * 0.512)
+                screen_bgr = take_screenshot_bgr()
+                if screen_bgr is not None:
+                    crop_cap = screen_bgr[c_y1:c_y2, c_x1:c_x2]
+                    if crop_cap.size > 0:
+                        cv2.imwrite(os.path.join(SCRIPT_DIR, "debug_last_captcha_crop.png"), crop_cap)
+                        print(f"   📸 Calibrated fallback captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
+                        solved_captcha = solve_captcha_with_gemini(crop_cap)
             except Exception as e:
                 print(f"   ⚠️ Captcha capture fallback error: {e}")
 
@@ -805,6 +842,8 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
             pyautogui.press('esc')
             time.sleep(0.05)
             pyautogui.moveTo(cap_box_x, cap_box_y, duration=0.2)
+            pyautogui.click()
+            time.sleep(0.10)
             pyautogui.click()
             time.sleep(0.12)
             pyautogui.hotkey('ctrl', 'a')
@@ -825,6 +864,8 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
                 pyautogui.press('esc')
                 time.sleep(0.05)
                 pyautogui.moveTo(cap_box_x, cap_box_y, duration=0.2)
+                pyautogui.click()
+                time.sleep(0.10)
                 pyautogui.click()
                 time.sleep(0.12)
                 pyautogui.hotkey('ctrl', 'a')
@@ -861,8 +902,8 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
                 pyautogui.click()
                 time.sleep(0.2)
             else:
-                chk_x = int(sw * 0.046)
-                chk_y = int(sh * 0.722)
+                chk_x = int(sw * 0.043)
+                chk_y = int(sh * 0.736)
                 print(f"   🎯 Calibrated fallback for 'Validate captcha': ({chk_x}, {chk_y})")
                 pyautogui.moveTo(chk_x, chk_y, duration=0.2)
                 pyautogui.click()
@@ -886,7 +927,7 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
             pyautogui.moveTo(btn_x, btn_y, duration=0.2)
             pyautogui.click()
         else:
-            btn_x = int(sw * 0.129)
+            btn_x = int(sw * 0.122)
             btn_y = int(sh * 0.842)
             print(f"   🎯 Calibrated fallback for '⚡ Apply & Trigger': ({btn_x}, {btn_y})")
             pyautogui.moveTo(btn_x, btn_y, duration=0.2)
@@ -979,17 +1020,14 @@ def hard_refresh_and_confirm_alert():
             pyautogui.click()
             clicked = True
             break
-        try:
-            shot = pyautogui.screenshot()
-            scr = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+        scr = take_screenshot_bgr()
+        if scr is not None:
             popup_loc = is_alert_popup_present(scr, threshold=0.63)
             if popup_loc:
                 print(f"   🎯 Alert popup detected at {popup_loc[0]}. Clicking OK button...")
                 pyautogui.click(popup_loc[0][0], popup_loc[0][1])
                 clicked = True
                 break
-        except Exception:
-            pass
         time.sleep(0.2)
 
     if not clicked:
@@ -1103,9 +1141,8 @@ def handle_photo_upload(app_no):
     # 2. Ensure all popups are completely cleared before touching Upload
     print("🔍 Noticing screen status: ensuring all popups have completely disappeared before Upload...")
     for _ in range(5):
-        try:
-            shot = pyautogui.screenshot()
-            scr = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+        scr = take_screenshot_bgr()
+        if scr is not None:
             lingering = is_alert_popup_present(scr, threshold=0.78)
             if lingering:
                 print(f"   ⚠️ Lingering popup still on screen at {lingering[0]}! Clicking OK to clear...")
@@ -1114,8 +1151,7 @@ def handle_photo_upload(app_no):
                 time.sleep(0.6)
             else:
                 break
-        except Exception:
-            pass
+        time.sleep(0.1)
 
     # 3. Locate photo file in Downloads folder FIRST (matching application number)
     downloads_dirs = [
@@ -1157,9 +1193,8 @@ def handle_photo_upload(app_no):
 
     # Search top 28% of screen
     for attempt in range(1, 12):
-        try:
-            shot = pyautogui.screenshot()
-            scr = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+        scr = take_screenshot_bgr()
+        if scr is not None:
             top_region = scr[:int(sh * 0.28), :]
 
             if os.path.exists(BTN_TOP_UPLOAD):
@@ -1183,13 +1218,11 @@ def handle_photo_upload(app_no):
                         loc_upload = best_l
                         print(f"   🎯 Orange 'Upload' button matched visually: score={best_v:.2f} at {loc_upload}")
                         break
-        except Exception:
-            pass
         time.sleep(0.5)
 
     if not loc_upload:
-        # Fallback to calibrated coordinate on top toolbar: x ~ 34.6% of sw, y ~ 17.9% of sh
-        loc_upload = (int(sw * 0.346), int(sh * 0.179))
+        # Fallback to calibrated coordinate on top toolbar: x ~ 34.3% of sw, y ~ 18.1% of sh
+        loc_upload = (int(sw * 0.343), int(sh * 0.181))
         print(f"   ℹ️ Using calibrated fallback for 'Upload' button: {loc_upload}")
 
     print(f"   🖱️ Clicking 'Upload' button at {loc_upload} to open Windows File Dialog...")
