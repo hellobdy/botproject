@@ -217,34 +217,48 @@ def locate_on_screen(template_path, threshold=0.75):
 
 def enter_into_field(label_name, tpl_path, offset_x, offset_y, text_to_enter):
     """
-    Input box ke andar click karke text paste karta hai.
+    Input box ke andar click karke text paste karta hai (with calibrated resolution fallback).
     """
     print(f"\n🔍 Searching for '{label_name}' on screen...")
-    loc, scale = locate_on_screen(tpl_path, threshold=0.75)
+    sw, sh = pyautogui.size()
+    loc, scale = locate_on_screen(tpl_path, threshold=0.70)
     
     if loc:
         target_x = loc[0] + int(offset_x * scale)
         target_y = loc[1] + int(offset_y * scale)
-        print(f"   🎯 Found '{label_name}' at {loc} (scale={scale:.2f})")
-        print(f"   🖱️ Clicking exact input box at: ({target_x}, {target_y})")
-        
-        pyautogui.moveTo(target_x, target_y, duration=0.25)
-        pyautogui.click()
-        time.sleep(0.12)
-        # Clear existing text
-        pyautogui.hotkey('ctrl', 'a')
-        time.sleep(0.05)
-        pyautogui.press('backspace')
-        time.sleep(0.05)
-        # Paste new text
-        pyperclip.copy(text_to_enter)
-        pyautogui.hotkey('ctrl', 'v')
-        time.sleep(0.15)
-        print(f"   ✅ Entered {label_name}: '{text_to_enter}'")
-        return True
+        print(f"   🎯 Found '{label_name}' visually at {loc} (scale={scale:.2f}) -> clicking ({target_x}, {target_y})")
     else:
-        print(f"   ⚠️ '{label_name}' screen par nahi mila! Blind click nahi kiya.")
-        return False
+        # Calibrated fallback for 16:9 screen resolutions (e.g. 1920x1080 / 1366x768)
+        lbl_lower = label_name.lower()
+        if "app" in lbl_lower:
+            target_x, target_y = int(sw * 0.842), int(sh * 0.243)
+        elif "dob" in lbl_lower:
+            target_x, target_y = int(sw * 0.842), int(sh * 0.365)
+        elif "pwd" in lbl_lower or "pass" in lbl_lower:
+            target_x, target_y = int(sw * 0.842), int(sh * 0.486)
+        else:
+            print(f"   ⚠️ '{label_name}' screen par nahi mila! Blind click nahi kiya.")
+            return False
+        print(f"   🎯 Using calibrated resolution fallback for '{label_name}': ({target_x}, {target_y})")
+
+    # Clear any accidental full page selection first
+    pyautogui.press('esc')
+    time.sleep(0.05)
+
+    pyautogui.moveTo(target_x, target_y, duration=0.25)
+    pyautogui.click()
+    time.sleep(0.20)
+    # Clear existing text inside the box
+    pyautogui.hotkey('ctrl', 'a')
+    time.sleep(0.08)
+    pyautogui.press('backspace')
+    time.sleep(0.08)
+    # Paste new text
+    pyperclip.copy(text_to_enter)
+    pyautogui.hotkey('ctrl', 'v')
+    time.sleep(0.18)
+    print(f"   ✅ Entered {label_name}: '{text_to_enter}'")
+    return True
 
 def get_obscura_profile_dir():
     """Detects the exact profile directory for 'testing' or 'Obscura Files' from Chrome's Local State."""
@@ -384,23 +398,23 @@ def fill_rto_code_in_mock(rto_code):
         est_header = (loc_rto[0] + int(26 * scale_rto), loc_rto[1] - int(35 * scale_rto))
         return est_header, scale_rto
 
-    # Priority 4: Dynamic screen resolution fallback (bottom-left area)
-    fallback_x = int(sw * 0.109)
-    fallback_y = int(sh * 0.633)
-    print(f"   ℹ️ Fallback RTO coordinate for {sw}x{sh}: ({fallback_x}, {fallback_y})")
+    # Priority 4: Calibrated screen resolution fallback (bottom-left Sarathi Mock RTO box)
+    fallback_x = int(sw * 0.132)
+    fallback_y = int(sh * 0.508)
+    print(f"   ℹ️ Calibrated fallback RTO coordinate for {sw}x{sh}: ({fallback_x}, {fallback_y})")
     pyautogui.moveTo(fallback_x, fallback_y, duration=0.25)
     pyautogui.click()
-    time.sleep(0.12)
+    time.sleep(0.18)
     pyautogui.hotkey('ctrl', 'a')
-    time.sleep(0.05)
+    time.sleep(0.08)
     pyautogui.press('backspace')
-    time.sleep(0.05)
+    time.sleep(0.08)
     pyperclip.copy(rto_code)
     pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.15)
-    print(f"   ✅ Entered RTO CODE: '{rto_code}' via resolution scaling!")
+    time.sleep(0.18)
+    print(f"   ✅ Entered RTO CODE: '{rto_code}' via calibrated resolution scaling!")
     scale_screen = sw / 1024.0
-    est_header = (fallback_x - int(20 * scale_screen), fallback_y - int(50 * scale_screen))
+    est_header = (int(sw * 0.130), int(sh * 0.245))
     return est_header, scale_screen
 
 def is_alert_popup_present(screen_bgr, threshold=0.78):
@@ -768,19 +782,19 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
             except Exception as e:
                 print(f"   ⚠️ Captcha capture error: {e}")
         else:
-            cap_box_x = int(sw * 0.455)
-            cap_box_y = int(sh * 0.605)
+            cap_box_x = int(sw * 0.459)
+            cap_box_y = int(sh * 0.486)
             try:
-                c_x1 = int(sw * 0.50)
-                c_x2 = int(sw * 0.61)
-                c_y1 = int(sh * 0.59)
-                c_y2 = int(sh * 0.62)
+                c_x1 = int(sw * 0.510)
+                c_x2 = int(sw * 0.605)
+                c_y1 = int(sh * 0.465)
+                c_y2 = int(sh * 0.515)
                 screenshot = pyautogui.screenshot()
                 screen_bgr = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
                 crop_cap = screen_bgr[c_y1:c_y2, c_x1:c_x2]
                 if crop_cap.size > 0:
                     cv2.imwrite(os.path.join(SCRIPT_DIR, "debug_last_captcha_crop.png"), crop_cap)
-                    print(f"   📸 Fallback captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
+                    print(f"   📸 Calibrated fallback captcha crop saved ({crop_cap.shape[1]}x{crop_cap.shape[0]}), decoding via Gemini AI...")
                     solved_captcha = solve_captcha_with_gemini(crop_cap)
             except Exception as e:
                 print(f"   ⚠️ Captcha capture fallback error: {e}")
@@ -788,6 +802,8 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
         # 3. Enter captcha into Chrome
         if solved_captcha:
             print(f"   ✍️ Auto-entering Captcha: '{solved_captcha}' into Chrome...")
+            pyautogui.press('esc')
+            time.sleep(0.05)
             pyautogui.moveTo(cap_box_x, cap_box_y, duration=0.2)
             pyautogui.click()
             time.sleep(0.12)
@@ -806,6 +822,8 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
             except Exception:
                 user_captcha = ""
             if user_captcha:
+                pyautogui.press('esc')
+                time.sleep(0.05)
                 pyautogui.moveTo(cap_box_x, cap_box_y, duration=0.2)
                 pyautogui.click()
                 time.sleep(0.12)
@@ -831,7 +849,11 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
 
         if chk_needed:
             print("   🖱️ Checking 'Validate captcha' in Sarathi Mock...")
-            if mock_header_loc:
+            loc_val, scale_val = locate_on_screen(TPL_VALIDATE_CAPTCHA, threshold=0.70)
+            if loc_val:
+                pyautogui.click(loc_val[0], loc_val[1])
+                time.sleep(0.2)
+            elif mock_header_loc:
                 chk_x = mock_header_loc[0] + int(-35 * mock_scale)
                 chk_y = mock_header_loc[1] + int(147 * mock_scale)
                 print(f"   🎯 Clicking checkbox at: ({chk_x}, {chk_y})")
@@ -839,10 +861,12 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
                 pyautogui.click()
                 time.sleep(0.2)
             else:
-                loc_val, scale_val = locate_on_screen(TPL_VALIDATE_CAPTCHA, threshold=0.70)
-                if loc_val:
-                    pyautogui.click(loc_val[0], loc_val[1])
-                    time.sleep(0.2)
+                chk_x = int(sw * 0.046)
+                chk_y = int(sh * 0.722)
+                print(f"   🎯 Calibrated fallback for 'Validate captcha': ({chk_x}, {chk_y})")
+                pyautogui.moveTo(chk_x, chk_y, duration=0.2)
+                pyautogui.click()
+                time.sleep(0.2)
             checkbox_already_checked = True
             print("   ✅ 'Validate captcha' checked!")
         else:
@@ -852,16 +876,21 @@ def execute_captcha_and_mock_trigger(mock_header_loc, mock_scale, max_attempts=5
 
         # 5. Click '⚡ Apply & Trigger' button in Sarathi Mock
         print("   🖱️ Clicking '⚡ Apply & Trigger' button in Sarathi Mock...")
-        if mock_header_loc:
+        loc_btn, scale_btn = locate_on_screen(TPL_APPLY_TRIGGER, threshold=0.70)
+        if loc_btn:
+            pyautogui.click(loc_btn[0], loc_btn[1])
+        elif mock_header_loc:
             btn_x = mock_header_loc[0] + int(20 * mock_scale)
             btn_y = mock_header_loc[1] + int(185 * mock_scale)
             print(f"   🎯 Clicking button at: ({btn_x}, {btn_y})")
             pyautogui.moveTo(btn_x, btn_y, duration=0.2)
             pyautogui.click()
         else:
-            loc_btn, scale_btn = locate_on_screen(TPL_APPLY_TRIGGER, threshold=0.70)
-            if loc_btn:
-                pyautogui.click(loc_btn[0], loc_btn[1])
+            btn_x = int(sw * 0.129)
+            btn_y = int(sh * 0.842)
+            print(f"   🎯 Calibrated fallback for '⚡ Apply & Trigger': ({btn_x}, {btn_y})")
+            pyautogui.moveTo(btn_x, btn_y, duration=0.2)
+            pyautogui.click()
 
         print("   ✅ '⚡ Apply & Trigger' clicked!")
 
@@ -1159,8 +1188,8 @@ def handle_photo_upload(app_no):
         time.sleep(0.5)
 
     if not loc_upload:
-        # Fallback to calibrated coordinate on top toolbar: x ~ 37% of sw, y ~ 13.5% of sh
-        loc_upload = (int(sw * 0.369), int(sh * 0.136))
+        # Fallback to calibrated coordinate on top toolbar: x ~ 34.6% of sw, y ~ 17.9% of sh
+        loc_upload = (int(sw * 0.346), int(sh * 0.179))
         print(f"   ℹ️ Using calibrated fallback for 'Upload' button: {loc_upload}")
 
     print(f"   🖱️ Clicking 'Upload' button at {loc_upload} to open Windows File Dialog...")
