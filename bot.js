@@ -444,7 +444,7 @@ function parseSingleLineInput(text) {
 
   // If rtoCode not given in line, derive from state if possible
   if (!rtoCode) {
-    rtoCode = deriveRtoCode('', '', matchedState) || 'AS04';
+    rtoCode = deriveRtoCode('', '', matchedState) || '';
   }
 
   return { state: matchedState, appNo, dob, password, rtoCode };
@@ -659,39 +659,610 @@ const KNOWN_RTO_MAP = {
   'VASANT VIHAR': 'DL12',
   'SURAJMAL VIHAR': 'DL13',
 
-  // Rajasthan
-  'JAIPUR': 'RJ14', 'JAIPUR NORTH': 'RJ45',
+  // Rajasthan (Complete)
+  'AJMER': 'RJ01',
   'ALWAR': 'RJ02',
+  'BANSWARA': 'RJ03',
+  'BARMER': 'RJ04',
   'BHARATPUR': 'RJ05',
   'BHILWARA': 'RJ06',
   'BIKANER': 'RJ07',
-  'CHITTORGARH': 'RJ09',
+  'BUNDI': 'RJ08',
+  'CHITTORGARH': 'RJ09', 'CHITTOR': 'RJ09',
+  'CHURU': 'RJ10',
+  'DHOLPUR': 'RJ11',
+  'DUNGARPUR': 'RJ12',
+  'SRI GANGANAGAR': 'RJ13', 'GANGANAGAR': 'RJ13',
+  'JAIPUR': 'RJ14', 'JAIPUR SOUTH': 'RJ14', 'JAIPUR NORTH': 'RJ45',
+  'JAISALMER': 'RJ15',
+  'JALORE': 'RJ16',
+  'JHALAWAR': 'RJ17',
+  'JHUNJHUNU': 'RJ18',
   'JODHPUR': 'RJ19',
   'KOTA': 'RJ20',
-  'UDAIPUR': 'RJ27'
+  'NAGAUR': 'RJ21',
+  'PALI': 'RJ22',
+  'SIKAR': 'RJ23',
+  'SIROHI': 'RJ24',
+  'SAWAI MADHOPUR': 'RJ25',
+  'TONK': 'RJ26',
+  'UDAIPUR': 'RJ27',
+  'BARAN': 'RJ28',
+  'DAUSA': 'RJ29',
+  'RAJSAMAND': 'RJ30',
+  'HANUMANGARH': 'RJ31',
+  'KOTPUTLI': 'RJ32',
+  'RAMGANJMANDI': 'RJ33',
+  'KARAULI': 'RJ34',
+  'PRATAPGARH': 'RJ35',
+  'BEAWAR': 'RJ36',
+  'DIDWANA': 'RJ37',
+  'ABU ROAD': 'RJ38',
+  'BALOTRA': 'RJ39',
+  'BHIWADI': 'RJ40',
+  'CHOMU': 'RJ41',
+  'KISHANGARH': 'RJ42',
+  'PHALODI': 'RJ43',
+  'SUJANGARH': 'RJ44',
+  'BHINMAL': 'RJ46',
+  'KEKRI': 'RJ48',
+  'NOKHA': 'RJ49',
+  'SHAHJAHANPUR': 'RJ51',
+
+  // Jammu and Kashmir
+  'SRINAGAR': 'JK01',
+  'JAMMU': 'JK02',
+  'ANANTNAG': 'JK03',
+  'BUDGAM': 'JK04', 'BADGAM': 'JK04',
+  'BARAMULLA': 'JK05', 'BARAMULA': 'JK05',
+  'DODA': 'JK06',
+  'KATHUA': 'JK08',
+  'KUPWARA': 'JK09',
+  'RAJOURI': 'JK11',
+  'POONCH': 'JK12',
+  'PULWAMA': 'JK13',
+  'UDHAMPUR': 'JK14',
+  'BANDIPORA': 'JK15', 'BANDIPORE': 'JK15',
+  'GANDERBAL': 'JK16',
+  'KULGAM': 'JK17',
+  'KISHTWAR': 'JK18',
+  'RAMBAN': 'JK19',
+  'REASI': 'JK20',
+  'SAMBA': 'JK21',
+  'SHOPIAN': 'JK22',
+
+  // Ladakh
+  'LEH': 'LA01', 'LADAKH': 'LA01',
+  'KARGIL': 'LA02',
+
+  // Punjab
+  'AMRITSAR': 'PB02',
+  'BATHINDA': 'PB03', 'BHATINDA': 'PB03',
+  'FARIDKOT': 'PB04',
+  'FEROZEPUR': 'PB05', 'FIROZPUR': 'PB05',
+  'GURDASPUR': 'PB06',
+  'HOSHIARPUR': 'PB07',
+  'JALANDHAR': 'PB08',
+  'KAPURTHALA': 'PB09',
+  'LUDHIANA': 'PB10',
+  'PATIALA': 'PB11',
+  'RUPNAGAR': 'PB12', 'ROPAR': 'PB12',
+  'SANGRUR': 'PB13',
+  'BARNALA': 'PB19',
+  'FAZILKA': 'PB22',
+  'FATEHGARH SAHIB': 'PB23',
+  'MOGA': 'PB29',
+  'MUKTSAR': 'PB30', 'SRI MUKTSAR SAHIB': 'PB30',
+  'MANSA': 'PB31',
+  'NAWANSHAHR': 'PB32', 'SBS NAGAR': 'PB32',
+  'PATHANKOT': 'PB35',
+  'TARN TARAN': 'PB46',
+  'MOHALI': 'PB65', 'SAS NAGAR': 'PB65',
+  'MALERKOTLA': 'PB88',
+
+  // Chandigarh
+  'CHANDIGARH': 'CH01',
+
+  // Haryana
+  'AMBALA': 'HR01',
+  'YAMUNANAGAR': 'HR02', 'JAGADHRI': 'HR02',
+  'PANCHKULA': 'HR03',
+  'NARAINGARH': 'HR04',
+  'KARNAL': 'HR05',
+  'PANIPAT': 'HR06',
+  'KURUKSHETRA': 'HR07',
+  'KAITHAL': 'HR08',
+  'GUHLA': 'HR09',
+  'SONIPAT': 'HR10', 'SONEPAT': 'HR10',
+  'GOHANA': 'HR11',
+  'ROHTAK': 'HR12',
+  'BAHADURGARH': 'HR13',
+  'JHAJJAR': 'HR14',
+  'MEHAM': 'HR15',
+  'BHIWANI': 'HR16',
+  'TOSHAM': 'HR17',
+  'LOHARU': 'HR18',
+  'CHARKHI DADRI': 'HR19',
+  'HISAR': 'HR20', 'HISSAR': 'HR20',
+  'HANSI': 'HR21',
+  'FATEHABAD': 'HR22',
+  'TOHANA': 'HR23',
+  'SIRSA': 'HR24',
+  'DABWALI': 'HR25',
+  'GURGAON': 'HR26', 'GURUGRAM': 'HR26',
+  'NUH': 'HR27', 'MEWAT': 'HR27',
+  'FEROZEPUR JHIRKA': 'HR28',
+  'BALLABGARH': 'HR29',
+  'PALWAL': 'HR30',
+  'JIND': 'HR31',
+  'NARWANA': 'HR32',
+  'SAFIDON': 'HR33',
+  'MAHENDRAGARH': 'HR34', 'MOHINDERGARH': 'HR34',
+  'NARNAUL': 'HR35',
+  'REWARI': 'HR36',
+  'FARIDABAD': 'HR51',
+
+  // Himachal Pradesh
+  'SHIMLA': 'HP01', 'SHIMLA URBAN': 'HP01', 'SHIMLA RURAL': 'HP02',
+  'DHARAMSHALA': 'HP02', 'DHARAMSALA': 'HP02',
+  'MANDI': 'HP03',
+  'KANGRA': 'HP04',
+  'KULLU': 'HP05',
+  'HAMIRPUR HP': 'HP06',
+  'UNA': 'HP07',
+  'BILASPUR HP': 'HP08',
+  'SOLAN': 'HP09',
+  'SIRMAUR': 'HP10', 'NAHAN': 'HP10',
+  'CHAMBA': 'HP11',
+  'KINNAUR': 'HP12', 'RECKONG PEO': 'HP12',
+  'LAHAUL': 'HP13', 'SPITI': 'HP13', 'KEYLONG': 'HP13',
+  'PALAMPUR': 'HP37',
+  'BADDI': 'HP93',
+
+  // Uttarakhand
+  'ALMORA': 'UK01',
+  'BAGESHWAR': 'UK02',
+  'CHAMPAWAT': 'UK03',
+  'NAINITAL': 'UK04', 'HALDWANI': 'UK04',
+  'PITHORAGARH': 'UK05',
+  'UDHAM SINGH NAGAR': 'UK06', 'RUDRAPUR': 'UK06',
+  'DEHRADUN': 'UK07',
+  'HARIDWAR': 'UK08',
+  'TEHRI': 'UK09', 'NEW TEHRI': 'UK09',
+  'UTTARKASHI': 'UK10',
+  'CHAMOLI': 'UK11', 'GOPESHWAR': 'UK11',
+  'PAURI': 'UK12', 'GARHWAL': 'UK12',
+  'RUDRAPRAYAG': 'UK13',
+  'RISHIKESH': 'UK14',
+  'KOTDWAR': 'UK15',
+  'ROORKEE': 'UK17',
+  'KASHIPUR': 'UK18',
+  'RAMNAGAR': 'UK19',
+
+  // Maharashtra
+  'MUMBAI CENTRAL': 'MH01', 'TARDEO': 'MH01', 'MUMBAI': 'MH01',
+  'MUMBAI WEST': 'MH02', 'ANDHERI': 'MH02',
+  'MUMBAI EAST': 'MH03', 'WADALA': 'MH03',
+  'THANE': 'MH04',
+  'KALYAN': 'MH05',
+  'PEN': 'MH06', 'RAIGAD': 'MH06',
+  'SINDHUDURG': 'MH07',
+  'RATNAGIRI': 'MH08',
+  'KOLHAPUR': 'MH09',
+  'SANGLI': 'MH10',
+  'SATARA': 'MH11',
+  'PUNE': 'MH12',
+  'SOLAPUR': 'MH13',
+  'PIMPRI': 'MH14', 'CHINCHWAD': 'MH14',
+  'NASHIK': 'MH15',
+  'AHMEDNAGAR': 'MH16',
+  'SHRIRAMPUR': 'MH17',
+  'DHULE': 'MH18',
+  'JALGAON': 'MH19',
+  'AURANGABAD': 'MH20', 'SAMBHAJINAGAR': 'MH20', 'CHHATRAPATI SAMBHAJINAGAR': 'MH20',
+  'JALNA': 'MH21',
+  'PARBHANI': 'MH22',
+  'BEED': 'MH23',
+  'LATUR': 'MH24',
+  'OSMANABAD': 'MH25', 'DHARASHIV': 'MH25',
+  'NANDED': 'MH26',
+  'AMRAVATI': 'MH27',
+  'BULDHANA': 'MH28',
+  'YAVATMAL': 'MH29',
+  'AKOLA': 'MH30',
+  'NAGPUR': 'MH31', 'NAGPUR EAST': 'MH49',
+  'WARDHA': 'MH32',
+  'GADCHIROLI': 'MH33',
+  'CHANDRAPUR': 'MH34',
+  'GONDIA': 'MH35',
+  'BHANDARA': 'MH36',
+  'WASHIM': 'MH37',
+  'HINGOLI': 'MH38',
+  'NANDURBAR': 'MH39',
+  'VASHI': 'MH43', 'NAVI MUMBAI': 'MH43',
+  'PANVEL': 'MH46',
+  'BORIVALI': 'MH47',
+  'VASAI': 'MH48',
+
+  // Gujarat
+  'AHMEDABAD': 'GJ01', 'AHMEDABAD EAST': 'GJ27', 'AHMEDABAD RURAL': 'GJ38',
+  'MEHSANA': 'GJ02',
+  'RAJKOT': 'GJ03',
+  'BHAVNAGAR': 'GJ04',
+  'SURAT': 'GJ05',
+  'VADODARA': 'GJ06',
+  'KHEDA': 'GJ07', 'NADIAD': 'GJ07',
+  'BANASKANTHA': 'GJ08', 'PALANPUR': 'GJ08',
+  'SABARKANTHA': 'GJ09', 'HIMMATNAGAR': 'GJ09',
+  'JAMNAGAR': 'GJ10',
+  'JUNAGADH': 'GJ11',
+  'KUTCH': 'GJ12', 'BHUJ': 'GJ12',
+  'SURENDRANAGAR': 'GJ13',
+  'AMRELI': 'GJ14',
+  'VALSAD': 'GJ15',
+  'BHARUCH': 'GJ16',
+  'PANCHMAHAL': 'GJ17', 'GODHRA': 'GJ17',
+  'GANDHINAGAR': 'GJ18',
+  'BARDOLI': 'GJ19',
+  'DAHOD': 'GJ20',
+  'NAVSARI': 'GJ21',
+  'NARMADA': 'GJ22', 'RAJPIPLA': 'GJ22',
+  'ANAND': 'GJ23',
+  'PATAN': 'GJ24',
+  'PORBANDAR': 'GJ25',
+  'TAPI': 'GJ26', 'VYARA': 'GJ26',
+  'DANG': 'GJ30', 'AHWA': 'GJ30',
+  'ARVALLI': 'GJ31', 'MODASA': 'GJ31',
+  'GIR SOMNATH': 'GJ32', 'VERAVAL': 'GJ32',
+  'BOTAD': 'GJ33',
+  'CHHOTA UDEPUR': 'GJ34',
+  'MAHISAGAR': 'GJ35', 'LUNAWADA': 'GJ35',
+  'MORBI': 'GJ36',
+  'DEVBHUMI DWARKA': 'GJ37', 'KHAMBHALIA': 'GJ37',
+
+  // Madhya Pradesh
+  'BHOPAL': 'MP04',
+  'HOSHANGABAD': 'MP05', 'NARMADAPURAM': 'MP05',
+  'GWALIOR': 'MP07',
+  'GUNA': 'MP08',
+  'INDORE': 'MP09',
+  'KHARGONE': 'MP10',
+  'KHANDWA': 'MP12',
+  'UJJAIN': 'MP13',
+  'MANDSAUR': 'MP14',
+  'SAGAR': 'MP15',
+  'CHHATARPUR': 'MP16',
+  'REWA': 'MP17',
+  'SHAHDOL': 'MP18',
+  'SATNA': 'MP19',
+  'JABALPUR': 'MP20',
+  'KATNI': 'MP21',
+  'SEONI': 'MP22',
+  'CHHINDWARA': 'MP28',
+  'SHIVPURI': 'MP33',
+  'TIKAMGARH': 'MP36',
+  'SEHORE': 'MP37',
+  'RAJGARH': 'MP39',
+  'VIDISHA': 'MP40',
+  'DEWAS': 'MP41',
+  'RATLAM': 'MP43',
+  'BETUL': 'MP48',
+  'BALAGHAT': 'MP50',
+
+  // West Bengal
+  'KOLKATA': 'WB01', 'BELTALA': 'WB02', 'SALT LAKE': 'WB03',
+  'HOWRAH': 'WB11', 'ULUBERIA': 'WB13',
+  'HOOGHLY': 'WB15', 'CHINSURAH': 'WB15', 'ARAMBAGH': 'WB17',
+  'ALIPORE': 'WB22', 'BARRACKPORE': 'WB24', 'BARASAT': 'WB25',
+  'TAMLUK': 'WB29', 'HALDIA': 'WB30',
+  'MIDNAPORE': 'WB33', 'MEDINIPUR': 'WB33', 'KHARAGPUR': 'WB34',
+  'ASANSOL': 'WB38', 'DURGAPUR': 'WB39',
+  'BURDWAN': 'WB41', 'BARDHAMAN': 'WB41',
+  'BIRBHUM': 'WB53', 'SURI': 'WB53', 'BOLPUR': 'WB54',
+  'PURULIA': 'WB55',
+  'MURSHIDABAD': 'WB57', 'BERHAMPORE': 'WB57',
+  'BALURGHAT': 'WB61', 'DAKSHIN DINAJPUR': 'WB61',
+  'COOCH BEHAR': 'WB63',
+  'MALDA': 'WB65',
+  'BANKURA': 'WB67',
+  'ALIPURDUAR': 'WB69',
+  'JALPAIGURI': 'WB71',
+  'SILIGURI': 'WB73',
+  'DARJEELING': 'WB77',
+
+  // Jharkhand
+  'RANCHI': 'JH01',
+  'HAZARIBAGH': 'JH02',
+  'DALTONGANJ': 'JH03', 'PALAMU': 'JH03', 'MEDININAGAR': 'JH03',
+  'DUMKA': 'JH04',
+  'JAMSHEDPUR': 'JH05', 'EAST SINGHBHUM': 'JH05',
+  'CHAIBASA': 'JH06', 'WEST SINGHBHUM': 'JH06',
+  'GUMLA': 'JH07',
+  'LOHARDAGA': 'JH08',
+  'BOKARO': 'JH09',
+  'DHANBAD': 'JH10',
+  'GIRIDIH': 'JH11',
+  'KODERMA': 'JH12',
+  'CHATRA': 'JH13',
+  'DEOGHAR': 'JH15',
+  'PAKUR': 'JH16',
+  'GODDA': 'JH17',
+  'SAHIBGANJ': 'JH18',
+  'LATEHAR': 'JH19',
+  'SIMDEGA': 'JH20',
+  'JAMTARA': 'JH21',
+  'SARAIKELA': 'JH22',
+  'KHUNTI': 'JH23',
+  'RAMGARH': 'JH24',
+
+  // Chhattisgarh
+  'RAIPUR': 'CG04',
+  'DHAMTARI': 'CG05',
+  'MAHASAMUND': 'CG06',
+  'DURG': 'CG07', 'BHILAI': 'CG07',
+  'RAJNANDGAON': 'CG08',
+  'KAWARDHA': 'CG09', 'KABIRDHAM': 'CG09',
+  'BILASPUR CG': 'CG10',
+  'JANJGIR': 'CG11', 'CHAMPA': 'CG11',
+  'KORBA': 'CG12',
+  'RAIGARH': 'CG13',
+  'JASHPUR': 'CG14',
+  'SURGUJA': 'CG15', 'AMBIKAPUR': 'CG15',
+  'KOREA': 'CG16', 'BAIKUNTHPUR': 'CG16',
+  'BASTAR': 'CG17', 'JAGDALPUR': 'CG17',
+  'DANTEWADA': 'CG18',
+  'KANKER': 'CG19',
+
+  // Karnataka
+  'BANGALORE': 'KA01', 'BENGALURU': 'KA01', 'KORAMANGALA': 'KA01',
+  'RAJAJINAGAR': 'KA02',
+  'INDIRANAGAR': 'KA03',
+  'YESHWANTHPUR': 'KA04',
+  'JAYANAGAR': 'KA05',
+  'TUMKUR': 'KA06', 'TUMAKURU': 'KA06',
+  'KOLAR': 'KA07',
+  'SHIMOGA': 'KA14', 'SHIVAMOGGA': 'KA14',
+  'DAVANGERE': 'KA17',
+  'MYSORE': 'KA09', 'MYSURU': 'KA09',
+  'MANGALORE': 'KA19', 'MANGALURU': 'KA19',
+  'UDUPI': 'KA20',
+  'BELGAUM': 'KA22', 'BELAGAVI': 'KA22',
+  'HUBLI': 'KA25', 'DHARWAD': 'KA25',
+  'GULBARGA': 'KA32', 'KALABURAGI': 'KA32',
+  'BELLARY': 'KA34', 'BALLARI': 'KA34',
+  'ELECTRONIC CITY': 'KA51',
+  'YELAHANKA': 'KA50',
+
+  // Kerala
+  'THIRUVANANTHAPURAM': 'KL01', 'TRIVANDRUM': 'KL01',
+  'KOLLAM': 'KL02',
+  'PATHANAMTHITTA': 'KL03',
+  'ALAPPUZHA': 'KL04',
+  'KOTTAYAM': 'KL05',
+  'IDUKKI': 'KL06',
+  'ERNAKULAM': 'KL07', 'KOCHI': 'KL07',
+  'THRISSUR': 'KL08',
+  'PALAKKAD': 'KL09',
+  'MALAPPURAM': 'KL10',
+  'KOZHIKODE': 'KL11', 'CALICUT': 'KL11',
+  'WAYANAD': 'KL12',
+  'KANNUR': 'KL13',
+  'KASARAGOD': 'KL14',
+
+  // Tamil Nadu
+  'CHENNAI': 'TN01', 'CHENNAI CENTRAL': 'TN01',
+  'CHENNAI NORTH': 'TN03', 'CHENNAI SOUTH': 'TN07', 'CHENNAI WEST': 'TN09',
+  'COIMBATORE': 'TN37',
+  'MADURAI': 'TN58',
+  'TIRUCHIRAPPALLI': 'TN45', 'TRICHY': 'TN45',
+  'SALEM': 'TN27',
+  'TIRUNELVELI': 'TN72',
+  'ERODE': 'TN33',
+  'VELLORE': 'TN23',
+  'TIRUPPUR': 'TN39',
+  'THANJAVUR': 'TN49',
+  'DINDIGUL': 'TN57',
+  'KANCHEEPURAM': 'TN21',
+
+  // Telangana
+  'HYDERABAD': 'TS09', 'SECUNDERABAD': 'TS10',
+  'RANGA REDDY': 'TS07',
+  'MEDCHAL': 'TS08',
+  'WARANGAL': 'TS03',
+  'KARIMNAGAR': 'TS02',
+  'KHAMMAM': 'TS04',
+  'NIZAMABAD': 'TS16',
+  'NALGONDA': 'TS05',
+  'MAHABUBNAGAR': 'TS06',
+
+  // Andhra Pradesh
+  'VISAKHAPATNAM': 'AP31', 'VIZAG': 'AP31',
+  'VIJAYAWADA': 'AP16',
+  'GUNTUR': 'AP07',
+  'TIRUPATI': 'AP03',
+  'KURNOOL': 'AP21',
+  'NELLORE': 'AP26',
+  'KAKINADA': 'AP05',
+  'RAJAHMUNDRY': 'AP05',
+  'ANANTAPUR': 'AP02',
+  'KADAPA': 'AP04',
+
+  // Goa
+  'PANAJI': 'GA01', 'NORTH GOA': 'GA01',
+  'MARGAO': 'GA02', 'SOUTH GOA': 'GA02',
+  'MAPUSA': 'GA03',
+  'BICHOLIM': 'GA04',
+  'PONDA': 'GA05',
+  'VASCO': 'GA06',
+
+  // Puducherry
+  'PUDUCHERRY': 'PY01', 'PONDICHERRY': 'PY01',
+  'OULGARET': 'PY02', 'KARAIKAL': 'PY02',
+  'MAHE': 'PY03',
+  'YANAM': 'PY04',
+
+  // Sikkim
+  'GANGTOK': 'SK01',
+  'GAYZING': 'SK02',
+  'MANGAN': 'SK03',
+  'JORETHANG': 'SK04',
+
+  // Tripura
+  'AGARTALA': 'TR01',
+  'DHARMANAGAR': 'TR02',
+  'UDAIPUR TRIPURA': 'TR03',
+  'KAILASHAHAR': 'TR04',
+  'AMBASSA': 'TR05',
+  'KHOWAI': 'TR06',
+  'BISHALGARH': 'TR07',
+  'SANTIRBAZAR': 'TR08',
+
+  // Manipur
+  'IMPHAL': 'MN01',
+  'CHURACHANDPUR': 'MN02',
+  'THOUBAL': 'MN04',
+  'BISHNUPUR': 'MN05',
+  'UKHRUL': 'MN07',
+
+  // Meghalaya
+  'SHILLONG': 'ML05',
+  'JOWAI': 'ML04',
+  'TURA': 'ML08',
+  'NONGSTOIN': 'ML06',
+  'WILLIAMNAGAR': 'ML07',
+
+  // Mizoram
+  'AIZAWL': 'MZ01',
+  'LUNGLEI': 'MZ02',
+  'SAIHA': 'MZ03',
+  'CHAMPHAI': 'MZ04',
+  'KOLASIB': 'MZ05',
+  'SERCHHIP': 'MZ06',
+  'LAWNGTLAI': 'MZ07',
+  'MAMIT': 'MZ08',
+
+  // Nagaland
+  'KOHIMA': 'NL01',
+  'MOKOKCHUNG': 'NL02',
+  'TUENSANG': 'NL03',
+  'MON': 'NL04',
+  'WOKHA': 'NL05',
+  'ZUNHEBOTO': 'NL06',
+  'DIMAPUR': 'NL07',
+  'PHEK': 'NL08',
+
+  // Arunachal Pradesh
+  'ITANAGAR': 'AR01', 'NAHARLAGUN': 'AR01',
+  'PASIGHAT': 'AR09',
+  'TEZU': 'AR11',
+  'TAWANG': 'AR10',
+  'ZIRO': 'AR03',
+  'BOMDILA': 'AR04',
+
+  // Andaman and Nicobar
+  'PORT BLAIR': 'AN01', 'ANDAMAN': 'AN01', 'CAR NICOBAR': 'AN02',
+
+  // DNH and DD
+  'SILVASSA': 'DN01', 'DADRA': 'DN01',
+  'DAMAN': 'DD01',
+  'DIU': 'DD02'
 };
 
 const STATE_CODE_PREFIX = {
-  'odisha': 'OD', 'orissa': 'OD',
-  'assam': 'AS',
-  'uttar pradesh': 'UP',
-  'bihar': 'BR',
-  'delhi': 'DL',
-  'maharashtra': 'MH',
-  'karnataka': 'KA',
-  'rajasthan': 'RJ',
-  'madhya pradesh': 'MP',
-  'west bengal': 'WB',
-  'punjab': 'PB',
-  'haryana': 'HR',
-  'gujarat': 'GJ',
-  'jharkhand': 'JH',
-  'chhattisgarh': 'CG',
-  'uttarakhand': 'UK'
+  'andaman and nicobar': 'AN', 'andaman': 'AN', 'an': 'AN',
+  'andhra pradesh': 'AP', 'andhra': 'AP', 'ap': 'AP',
+  'arunachal pradesh': 'AR', 'arunachal': 'AR', 'ar': 'AR',
+  'assam': 'AS', 'as': 'AS',
+  'bihar': 'BR', 'br': 'BR',
+  'chandigarh': 'CH', 'ch': 'CH',
+  'chhattisgarh': 'CG', 'chhatisgarh': 'CG', 'cg': 'CG',
+  'delhi': 'DL', 'nct of delhi': 'DL', 'dl': 'DL',
+  'goa': 'GA', 'ga': 'GA',
+  'gujarat': 'GJ', 'gj': 'GJ',
+  'haryana': 'HR', 'hr': 'HR',
+  'himachal pradesh': 'HP', 'himachal': 'HP', 'hp': 'HP',
+  'jammu and kashmir': 'JK', 'jammu & kashmir': 'JK', 'jammu': 'JK', 'kashmir': 'JK', 'j&k': 'JK', 'jk': 'JK',
+  'jharkhand': 'JH', 'jh': 'JH',
+  'karnataka': 'KA', 'ka': 'KA',
+  'kerala': 'KL', 'kl': 'KL',
+  'ladakh': 'LA', 'la': 'LA',
+  'lakshadweep': 'LD', 'lakshadweep(ut)': 'LD', 'ld': 'LD',
+  'madhya pradesh': 'MP', 'mp': 'MP',
+  'maharashtra': 'MH', 'mh': 'MH',
+  'manipur': 'MN', 'mn': 'MN',
+  'meghalaya': 'ML', 'ml': 'ML',
+  'mizoram': 'MZ', 'mz': 'MZ',
+  'nagaland': 'NL', 'nl': 'NL',
+  'odisha': 'OD', 'orissa': 'OD', 'od': 'OD', 'or': 'OD',
+  'pondicherry': 'PY', 'puducherry': 'PY', 'py': 'PY',
+  'punjab': 'PB', 'pb': 'PB',
+  'rajasthan': 'RJ', 'rj': 'RJ',
+  'sikkim': 'SK', 'sk': 'SK',
+  'tamil nadu': 'TN', 'tamilnadu': 'TN', 'tn': 'TN',
+  'telangana': 'TS', 'ts': 'TS', 'tg': 'TS',
+  'tripura': 'TR', 'tr': 'TR',
+  'ut of dnh and dd': 'DD', 'daman and diu': 'DD', 'dadra and nagar haveli': 'DN', 'dd': 'DD', 'dn': 'DN',
+  'uttarakhand': 'UK', 'uttaranchal': 'UK', 'uk': 'UK', 'ua': 'UK',
+  'uttar pradesh': 'UP', 'up': 'UP',
+  'west bengal': 'WB', 'wb': 'WB'
 };
 
+const STATE_DEFAULT_RTO = {
+  'AN': 'AN01',
+  'AP': 'AP01',
+  'AR': 'AR01',
+  'AS': 'AS04',
+  'BR': 'BR01',
+  'CG': 'CG04',
+  'CH': 'CH01',
+  'DD': 'DD01',
+  'DL': 'DL04',
+  'DN': 'DN01',
+  'GA': 'GA01',
+  'GJ': 'GJ01',
+  'HP': 'HP01',
+  'HR': 'HR01',
+  'JH': 'JH01',
+  'JK': 'JK01',
+  'KA': 'KA01',
+  'KL': 'KL01',
+  'LA': 'LA01',
+  'LD': 'LD01',
+  'MH': 'MH01',
+  'ML': 'ML05',
+  'MN': 'MN01',
+  'MP': 'MP04',
+  'MZ': 'MZ01',
+  'NL': 'NL01',
+  'OD': 'OD10',
+  'PB': 'PB02',
+  'PY': 'PY01',
+  'RJ': 'RJ14',
+  'SK': 'SK01',
+  'TN': 'TN01',
+  'TR': 'TR01',
+  'TS': 'TS09',
+  'UK': 'UK07',
+  'UP': 'UP78',
+  'WB': 'WB01'
+};
+
+function getStateCodePrefix(state) {
+  if (!state) return null;
+  const s = String(state).toLowerCase().trim().replace(/&/g, 'and').replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ');
+  if (STATE_CODE_PREFIX[s]) return STATE_CODE_PREFIX[s];
+  const upper = String(state).trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(upper)) return upper;
+  for (const [k, v] of Object.entries(STATE_CODE_PREFIX)) {
+    if (s.includes(k) || k.includes(s)) return v;
+  }
+  return null;
+}
+
 function deriveRtoCode(llNo, rtoName, state) {
-  // 1. Direct extraction from Learner Licence Number (e.g. "OD10 /0009446/2026" or "OD-10/...")
+  const statePrefix = getStateCodePrefix(state);
+
+  // 1. Direct extraction from Learner Licence Number (e.g. "OD10 /0009446/2026", "JK02/...")
   if (llNo) {
     const cleanLl = String(llNo).trim();
     const m = cleanLl.match(/\b([A-Za-z]{2})\s*[-/]?\s*(\d{1,3})\b/);
@@ -700,68 +1271,127 @@ function deriveRtoCode(llNo, rtoName, state) {
     }
   }
 
-  // 2. Lookup by RTO Name from map (e.g. "DTO,SIVSAGAR" -> "AS04", "RTO KORAPUT" -> "OD10")
+  // 2. Lookup by RTO Name from map (e.g. "ARTO, BARAMULLA" -> "JK05", "DTO, SIVSAGAR" -> "AS04")
   if (rtoName) {
     const rawUpper = String(rtoName).toUpperCase();
     const cleanRto = rawUpper.replace(/[^A-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // Check if RTO name already contains an RTO code like "OD10", "AS04", "UP78"
+    // Check if RTO name already contains an RTO code like "OD10", "AS04", "JK05", "UP78"
     const directCodeMatch = cleanRto.match(/\b([A-Z]{2})\s*(\d{1,3})\b/);
     if (directCodeMatch) {
       return directCodeMatch[1] + directCodeMatch[2].padStart(2, '0');
     }
 
-    // Strip common prefixes like DTO, RTO, ARTO, ZO, TRANSPORT OFFICE
+    // Strip common prefixes
     const strippedRto = cleanRto
-      .replace(/^(?:DTO|RTO|ARTO|ZO|OFFICE|DISTRICT TRANSPORT OFFICE|REGIONAL TRANSPORT OFFICE)\s+/, '')
+      .replace(/^(?:DTO|RTO|ARTO|ZO|OFFICE|DISTRICT TRANSPORT OFFICE|REGIONAL TRANSPORT OFFICE|ASSISTANT REGIONAL TRANSPORT OFFICE)\s+/, '')
       .trim();
 
-    // Direct match with stripped string
-    if (KNOWN_RTO_MAP[strippedRto]) {
-      return KNOWN_RTO_MAP[strippedRto];
-    }
-
-    // Direct match with clean string
-    if (KNOWN_RTO_MAP[cleanRto]) {
-      return KNOWN_RTO_MAP[cleanRto];
-    }
-
-    // Substring match
-    for (const [key, code] of Object.entries(KNOWN_RTO_MAP)) {
-      if (cleanRto.includes(key) || strippedRto.includes(key)) {
-        return code;
+    // Priority A: If state prefix is known, strictly match ONLY within this state!
+    if (statePrefix) {
+      if (KNOWN_RTO_MAP[strippedRto] && KNOWN_RTO_MAP[strippedRto].startsWith(statePrefix)) {
+        return KNOWN_RTO_MAP[strippedRto];
       }
-    }
+      if (KNOWN_RTO_MAP[cleanRto] && KNOWN_RTO_MAP[cleanRto].startsWith(statePrefix)) {
+        return KNOWN_RTO_MAP[cleanRto];
+      }
 
-    // Word-by-word match
-    const words = strippedRto.split(' ').filter(w => w.length >= 3);
-    for (const w of words) {
-      if (KNOWN_RTO_MAP[w]) {
-        return KNOWN_RTO_MAP[w];
+      for (const [key, code] of Object.entries(KNOWN_RTO_MAP)) {
+        if (code.startsWith(statePrefix)) {
+          if (cleanRto.includes(key) || strippedRto.includes(key) || key.includes(strippedRto)) {
+            return code;
+          }
+        }
+      }
+
+      const words = strippedRto.split(' ').filter(w => w.length >= 3);
+      for (const w of words) {
+        for (const [key, code] of Object.entries(KNOWN_RTO_MAP)) {
+          if (code.startsWith(statePrefix)) {
+            if (key === w || key.split(' ').includes(w)) {
+              return code;
+            }
+          }
+        }
+      }
+
+      // If state was specified and none of its districts matched, return this state's default RTO!
+      if (STATE_DEFAULT_RTO[statePrefix]) {
+        return STATE_DEFAULT_RTO[statePrefix];
+      }
+    } else {
+      // Direct match with stripped string
+      if (KNOWN_RTO_MAP[strippedRto]) {
+        return KNOWN_RTO_MAP[strippedRto];
+      }
+      if (KNOWN_RTO_MAP[cleanRto]) {
+        return KNOWN_RTO_MAP[cleanRto];
       }
       for (const [key, code] of Object.entries(KNOWN_RTO_MAP)) {
-        if (key === w || key.startsWith(w) || w.startsWith(key)) {
+        if (cleanRto.includes(key) || strippedRto.includes(key)) {
           return code;
         }
       }
     }
   }
 
-  // 3. Fallback based on State
-  if (state) {
-    const sLower = String(state).toLowerCase().trim();
-    const prefix = STATE_CODE_PREFIX[sLower];
-    if (prefix) {
-      if (prefix === 'AS') return 'AS04';
-      if (prefix === 'UP') return 'UP78';
-      if (prefix === 'RJ') return 'RJ14';
-      if (prefix === 'OD') return 'OD10';
-      if (prefix === 'DL') return 'DL04';
-      return `${prefix}01`;
-    }
+  // 3. Fallback based on State (Never default to AS04 for non-Assam states!)
+  if (statePrefix && STATE_DEFAULT_RTO[statePrefix]) {
+    return STATE_DEFAULT_RTO[statePrefix];
   }
 
   return 'AS04';
+}
+
+// ───────── ASYNC AI-ASSISTED RTO CODE RESOLVER ─────────
+async function resolveRtoCode(llNo, rtoName, state) {
+  const localCode = deriveRtoCode(llNo, rtoName, state);
+
+  // Check if localCode is high confidence (direct hit or LL hit)
+  if (localCode) {
+    if (llNo && String(llNo).includes(localCode)) return localCode;
+    if (rtoName) {
+      const rawUpper = String(rtoName).toUpperCase();
+      const hasDirectHit = Object.entries(KNOWN_RTO_MAP).some(([k, code]) => code === localCode && rawUpper.includes(k));
+      if (hasDirectHit) return localCode;
+    }
+  }
+
+  // If local derivation only gave a default state fallback and RTO name was provided, consult Gemini AI for exact code
+  if (rtoName && GEMINI_API_KEY && GEMINI_API_KEY !== 'PASTE_YOUR_GEMINI_API_KEY_HERE') {
+    try {
+      console.log(`🤖 Consulting Gemini AI for exact RTO code: State="${state}", RTO="${rtoName}"...`);
+      const prompt = `Identify the exact 4-character Indian RTO code (format: 2 uppercase letters followed by 2 digits, e.g. JK05, RJ14, UP78, MH12, PB02) for the following RTO office:\nState: ${state || 'India'}\nRTO Office: ${rtoName}\nOutput ONLY the 4-character code (nothing else).`;
+
+      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+      for (const model of candidateModels) {
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.0, maxOutputTokens: 20 }
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toUpperCase();
+            const m = text?.match(/\b([A-Z]{2}\d{2})\b/);
+            if (m) {
+              console.log(`✅ Gemini AI (${model}) resolved RTO Code: "${m[1]}" for "${rtoName}" [${state}]`);
+              return m[1];
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      console.warn(`⚠️ AI RTO lookup note: ${e.message}`);
+    }
+  }
+
+  return localCode || 'AS04';
 }
 
 // ───────── STEP 2: AUTOFILL & MOCK TRIGGER VIA OBSCURA FILES CHROME ─────────
@@ -947,7 +1577,7 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       }
     }
     if (!derivedRtoCode || derivedRtoCode === '—') {
-      derivedRtoCode = deriveRtoCode('', '', state) || 'AS04';
+      derivedRtoCode = await resolveRtoCode('', '', state);
     }
 
     let userPassword = password || '17760G';
@@ -1288,7 +1918,7 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       return res;
     });
 
-    const derivedRtoCode = deriveRtoCode(applicantInfo.llNo, applicantInfo.rto, state);
+    const derivedRtoCode = await resolveRtoCode(applicantInfo.llNo, applicantInfo.rto, state);
     console.log(`👤 Extracted Details: Name="${applicantInfo.name}", Father="${applicantInfo.fatherName}", RTO="${applicantInfo.rto}", RTO Code="${derivedRtoCode}", LL="${applicantInfo.llNo}"`);
 
     // 14. Extract Photo from #images
@@ -1385,7 +2015,7 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
 
     let finalRtoCode = derivedRtoCode;
     if (!finalRtoCode || finalRtoCode === '—') {
-      finalRtoCode = deriveRtoCode('', applicantInfo.rto, state) || 'AS04';
+      finalRtoCode = await resolveRtoCode('', applicantInfo.rto, state);
     }
 
     await executeStage2(state, appNo, dob, userPassword, finalRtoCode, subId, chatId);
