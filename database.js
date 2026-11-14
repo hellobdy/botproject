@@ -58,7 +58,7 @@ const database = {
     return db.find(item => item.id === id);
   },
 
-  create({ chatId, userName, state, appNo, dob, password }) {
+  create({ chatId, userName, state, appNo, dob, password, rtoCode }) {
     const db = readDb();
     const newRecord = {
       id: 'SUB_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
@@ -72,7 +72,7 @@ const database = {
       photoPath: null,
       photoBase64: null,
       rtoName: null,
-      rtoCode: null,
+      rtoCode: rtoCode || null,
       applicantName: null,
       fatherName: null,
       licenceNo: null,

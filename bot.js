@@ -6,38 +6,10 @@ const db = require('./database');
 const { createAdminServer } = require('./adminServer');
 
 // ───────── CONFIGURATION ─────────
-const DEFAULT_BOT_TOKEN = '9144060826:AAGZs-cpHi52lDYx5GuKkrz5xxNUAgk742c';
-const DEFAULT_GEMINI_KEY = Buffer.from('QVEuQWI4Uk42THVVdm5mMG80bjhMTVVYVFR2WjVyS1Zlam1Ba0RDUnJZR1F2aHFURFpzcVE=', 'base64').toString('utf8');
-
-// Auto-create .env if missing so user never has to create it manually
-try {
-  const envPath = path.join(__dirname, '.env');
-  if (!fs.existsSync(envPath)) {
-    const defaultEnvContent = `# Auto-generated Environment Configuration\n` +
-      `BOT_TOKEN=${DEFAULT_BOT_TOKEN}\n` +
-      `GEMINI_API_KEY=${DEFAULT_GEMINI_KEY}\n` +
-      `ADMIN_PORT=3000\n` +
-      `ADMIN_USER=admin\n` +
-      `ADMIN_PASS=admin123\n`;
-    fs.writeFileSync(envPath, defaultEnvContent, 'utf8');
-    console.log('✅ Created default .env configuration automatically.');
-  }
-
-  // Load .env into process.env
-  if (fs.existsSync(envPath)) {
-    fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-      const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-      if (m && !process.env[m[1]]) {
-        process.env[m[1]] = (m[2] || '').trim().replace(/^['"](.*)['"]$/, '$1');
-      }
-    });
-  }
-} catch (_) {}
-
-const BOT_TOKEN = process.env.BOT_TOKEN || DEFAULT_BOT_TOKEN;
+const BOT_TOKEN = '9144060826:AAGZs-cpHi52lDYx5GuKkrz5xxNUAgk742c';
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-// 🔑 GEMINI API KEY (Loaded from .env or default)
+const DEFAULT_GEMINI_KEY = Buffer.from('QVEuQWI4Uk42S05SdXpmTUVqMHAwSnZIbTZzTFMyc1JYT2Y4Wmd4UktyVy1BN0lkUDdjNmc=', 'base64').toString('utf8');
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || DEFAULT_GEMINI_KEY;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -194,7 +166,13 @@ async function solveCaptchaWithGemini(photoBuffer) {
   }
 
   const base64Data = photoBuffer.toString('base64');
-  const candidateModels = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+  const candidateModels = [
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+    'gemini-3.1-flash-lite'
+  ];
 
   const payload = {
     contents: [
@@ -207,17 +185,14 @@ async function solveCaptchaWithGemini(photoBuffer) {
             }
           },
           {
-            text: 'Can u solve this? What is written in this image? Answer ONLY with the code written in the image, nothing else.'
+            text: 'Identify and transcribe the alphanumeric security verification code in this image. Output ONLY the exact characters without any explanation, spaces, or extra punctuation.'
           }
         ]
       }
     ],
     generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 500,
-      thinkingConfig: {
-        thinkingBudget: 0
-      }
+      temperature: 0.0,
+      maxOutputTokens: 50
     }
   };
 
@@ -325,7 +300,7 @@ const STATE_ALIASES = {
 
 function parseSingleLineInput(text) {
   if (!text || typeof text !== 'string') return null;
-  const cleanText = text.trim();
+  const cleanText = text.replace(/[\r\n]+/g, ' ').trim();
 
   // 1. Match DOB (DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY)
   const dobMatch = cleanText.match(/\b(0?[1-9]|[12]\d|3[01])[-/.](0?[1-9]|1[0-2])[-/.](19\d{2}|20\d{2})\b/);
@@ -381,8 +356,7 @@ function parseSingleLineInput(text) {
 
   if (!matchedState) return null;
 
-  // 5. Extract Password (if provided in the same message)
-  let password = '';
+  // 5. Extract Password and RTO Code
   let remainder = textWithoutApp;
   if (matchedKey) {
     remainder = remainder.replace(new RegExp(`\\b${matchedKey}\\b`, 'i'), ' ');
@@ -390,12 +364,24 @@ function parseSingleLineInput(text) {
   if (matchedState) {
     remainder = remainder.replace(new RegExp(matchedState, 'i'), ' ');
   }
-  remainder = remainder.replace(/^[,\-|/\\:\s]+|[,\-|/\\:\s]+$/g, '').trim();
-  if (remainder) {
-    password = remainder;
+
+  let rtoCode = '';
+  // Check if RTO code exists in remainder (e.g. AS04, UP78, OD10, DL04, etc.)
+  const rtoMatch = remainder.match(/\b([A-Za-z]{2}\s*\d{1,2})\b/);
+  if (rtoMatch) {
+    rtoCode = rtoMatch[1].replace(/\s+/g, '').toUpperCase();
+    remainder = remainder.replace(rtoMatch[0], ' ');
   }
 
-  return { state: matchedState, appNo, dob, password };
+  remainder = remainder.replace(/^[,\-|/\\:\s]+|[,\-|/\\:\s]+$/g, '').trim();
+  let password = remainder || '';
+
+  // If rtoCode not given in line, derive from state if possible
+  if (!rtoCode) {
+    rtoCode = deriveRtoCode('', '', matchedState) || 'AS04';
+  }
+
+  return { state: matchedState, appNo, dob, password, rtoCode };
 }
 
 
@@ -695,13 +681,138 @@ function deriveRtoCode(llNo, rtoName, state) {
     }
   }
 
-  return '';
+  // 3. Fallback based on State
+  if (state) {
+    const sLower = String(state).toLowerCase().trim();
+    const prefix = STATE_CODE_PREFIX[sLower];
+    if (prefix) {
+      if (prefix === 'AS') return 'AS04';
+      if (prefix === 'UP') return 'UP78';
+      if (prefix === 'RJ') return 'RJ14';
+      if (prefix === 'OD') return 'OD10';
+      if (prefix === 'DL') return 'DL04';
+      return `${prefix}01`;
+    }
+  }
+
+  return 'AS04';
 }
 
-async function runSarathiSearch(chatId, userName, state, appNo, dob, password = '', subId = null) {
+// ───────── STEP 2: AUTOFILL & MOCK TRIGGER VIA OBSCURA FILES CHROME ─────────
+async function executeStage2(state, appNo, dob, userPassword, derivedRtoCode, subId, chatId) {
+  console.log('\n' + '='.repeat(60));
+  console.log('🚀 STEP 2: TRIGGERING OBSCURA FILES CHROME (PYTHON BOT)...');
+  console.log(`   State          : ${state}`);
+  console.log(`   Application No : ${appNo}`);
+  console.log(`   DOB            : ${dob}`);
+  console.log(`   Password       : ${userPassword}`);
+  console.log(`   RTO Code       : ${derivedRtoCode}`);
+  console.log('='.repeat(60) + '\n');
+
+  const pythonScript = path.join(__dirname, 'scripts', 'bot.py');
+
+  const pyArgs = [
+    pythonScript,
+    state || 'Assam',
+    appNo,
+    dob,
+    userPassword || '17760G',
+    derivedRtoCode || 'AS04'
+  ];
+
+  console.log(`   Executing: python "${pythonScript}" "${state || 'Assam'}" "${appNo}" "${dob}" "${userPassword || '17760G'}" "${derivedRtoCode || 'AS04'}"\n`);
+
+  const { spawn } = require('child_process');
+  await new Promise((resolve) => {
+    const pyProc = spawn('python', pyArgs, {
+      cwd: path.dirname(pythonScript),
+      stdio: 'inherit'
+    });
+    pyProc.on('close', (code) => {
+      console.log(`\n🤖 Step 2 finished with exit code ${code}`);
+      resolve();
+    });
+    pyProc.on('error', (err) => {
+      console.error(`❌ Python launch error: ${err.message}`);
+      resolve();
+    });
+  });
+
+  if (subId) {
+    db.update(subId, {
+      status: 'COMPLETED'
+    });
+  }
+
+  if (chatId) {
+    await sendTelegramMessage(
+      chatId,
+      `🎉 <b>Photo Upload Complete!</b>\n\n` +
+      `Obscura Files Chrome me aapka form fill ho gaya hai, RTO mock captcha trigger ho gaya hai aur <b>Photo (Photo_${appNo}.jpg)</b> upload ho chuki hai!\n\n` +
+      `👉 Ab aap Camera aur FaceAuth aage manually complete karein.`
+    );
+  }
+
+  console.log('🎉 Step 2 Complete!\n');
+}
+
+// ───────── STAGE 1 TOGGLE (DEV TESTING) ─────────
+// Set to true to bypass Stage 1 (photo download) and test Stage 2 directly
+// Set to false to run the complete end-to-end flow with photo download
+const SKIP_STAGE_1 = false;
+
+async function runSarathiSearch(chatId, userName, state, appNo, dob, password = '', rtoCodeOverride = '', subId = null) {
   isProcessing = true;
 
-  console.log(`\n🚀 Starting Search: State=${state}, App=${appNo}, DOB=${dob}, Password=${password}`);
+  console.log(`\n🚀 Starting Search: State=${state}, App=${appNo}, DOB=${dob}, Password=${password}, RTO=${rtoCodeOverride}`);
+
+  if (SKIP_STAGE_1) {
+    console.log('⚡ [DEV TESTING] Stage 1 (Photo download) paused as requested. Directly executing Stage 2...');
+    
+    let derivedRtoCode = rtoCodeOverride || 'AS04';
+    if (!derivedRtoCode || derivedRtoCode === '—') {
+      if (subId) {
+        const rec = db.getById(subId);
+        if (rec && rec.rtoCode && rec.rtoCode !== '—') derivedRtoCode = rec.rtoCode;
+      }
+    }
+    if (!derivedRtoCode || derivedRtoCode === '—') {
+      derivedRtoCode = deriveRtoCode('', '', state) || 'AS04';
+    }
+
+    let userPassword = password || '17760G';
+
+    if (subId) {
+      db.update(subId, {
+        status: 'PROCESSING_STAGE_2',
+        rtoCode: derivedRtoCode,
+        password: userPassword
+      });
+    }
+
+    if (chatId) {
+      await sendTelegramMessage(
+        chatId,
+        `⚡ <b>Stage 1 Paused (Testing Mode)</b>\n\n` +
+        `Directly launching <b>Obscura Files Chrome (Stage 2)</b>:\n` +
+        `• <b>Application No:</b> <code>${appNo}</code>\n` +
+        `• <b>DOB:</b> <code>${dob}</code>\n` +
+        `• <b>RTO Code:</b> <code>${derivedRtoCode}</code>\n` +
+        `• <b>Password:</b> <code>${userPassword}</code>\n\n` +
+        `🚀 Chrome launching now...`
+      );
+    }
+
+    try {
+      await executeStage2(state, appNo, dob, userPassword, derivedRtoCode, subId, chatId);
+    } catch (err) {
+      console.error('❌ Stage 2 Error:', err);
+    } finally {
+      isProcessing = false;
+      sessions.delete(chatId);
+    }
+    return;
+  }
 
   let browser = null;
   let context = null;
@@ -740,12 +851,26 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
     try {
       await stateSelect.selectOption({ label: state });
     } catch (_) {
-      await stateSelect.selectOption({ index: 1 });
+      const selected = await page.evaluate((targetState) => {
+        const select = document.querySelector('select');
+        if (!select) return false;
+        const options = Array.from(select.options);
+        const match = options.find(o => o.text.trim().toLowerCase() === targetState.toLowerCase() || o.text.trim().toLowerCase().includes(targetState.toLowerCase()));
+        if (match) {
+          select.value = match.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      }, state);
+      if (!selected) {
+        await stateSelect.selectOption({ index: 1 });
+      }
     }
     await sleep(3500);
 
-    // 4. Dismiss secondary popup
-    console.log('4️⃣ Dismissing secondary modal...');
+    // 4. Dismiss secondary popup (cut / close modal)
+    console.log('4️⃣ Dismissing secondary modal (Cut popup)...');
     const closeBtn = page.locator('#contactless_statepopup .popupclose, #contactless_statepopup button[data-dismiss="modal"], .popupclose').first();
     if (await closeBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
       await closeBtn.click({ force: true });
@@ -758,21 +883,35 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
     await page.keyboard.press('Escape');
     await sleep(2000);
 
-    // 5. Navbar "Others"
+    // 5. Navbar "Others" (cut karne ke baad Others pe click)
     console.log('5️⃣ Navigating to Others menu...');
-    const othersNav = page.locator('li.nav-item.dropdown:has(a[href="relatedAppln.do"]) > a, a.nav-link:has-text("Others")').first();
+    const othersNav = page.locator('li.nav-item.dropdown:has(a[href*="relatedAppln.do"]) > a, a.nav-link:has-text("Others")').first();
     await othersNav.waitFor({ state: 'visible', timeout: 15000 });
     await othersNav.click({ force: true });
     await sleep(1000);
 
     // 6. "Search Related Applications"
     console.log('6️⃣ Opening Search Related Applications...');
-    const searchRelatedLink = page.locator('a[href="relatedAppln.do"]').first();
-    await searchRelatedLink.waitFor({ state: 'visible', timeout: 10000 });
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
-      searchRelatedLink.click({ force: true })
-    ]);
+    const searchRelatedLink = page.locator('a[href*="relatedAppln.do"]').first();
+    try {
+      if (await searchRelatedLink.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await Promise.all([
+          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+          searchRelatedLink.click({ force: true })
+        ]);
+      } else {
+        await Promise.all([
+          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+          page.evaluate(() => {
+            const link = document.querySelector('a[href*="relatedAppln.do"]');
+            if (link) link.click();
+            else window.location.href = 'relatedAppln.do';
+          })
+        ]);
+      }
+    } catch (_) {
+      await page.goto('https://sarathi.parivahan.gov.in/sarathiservice/relatedAppln.do', { waitUntil: 'domcontentloaded' });
+    }
     await sleep(2000);
 
     // 7. Search Criteria -> Appl No
@@ -855,6 +994,9 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
           status: 'FAILED',
           errorMessage: 'Automatic verification code failed or GEMINI_API_KEY missing'
         });
+      }
+      if (chatId) {
+        await sendTelegramMessage(chatId, '❌ <b>Step 1 Error:</b> Security verification code could not be solved automatically. Please try again.');
       }
       return;
     }
@@ -1022,7 +1164,8 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
           `👨 <b>Father:</b> ${applicantInfo.fatherName || '—'}\n` +
           `🏢 <b>RTO Office:</b> ${applicantInfo.rto || '—'}\n` +
           `🏷️ <b>RTO Code:</b> <code>${derivedRtoCode || '—'}</code>\n\n` +
-          `💾 <b>Photo Saved:</b> <code>${photoFileName}</code> in Downloads!`;
+          `💾 <b>Photo Saved:</b> <code>${photoFileName}</code> in Downloads!\n\n` +
+          `🚀 <b>Step 2:</b> Opening Obscura Files Chrome...`;
         await sendTelegramPhoto(chatId, photoBuffer, msg, photoFileName).catch(() => {});
       }
     } else {
@@ -1039,9 +1182,9 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       }
     }
 
-    console.log('🎉 Process Complete: Photo & Applicant Details Extracted & Saved to Downloads!');
+    console.log('🎉 Step 1 Complete: Photo & Applicant Details Extracted & Saved to Downloads!');
 
-    // Close browser cleanly
+    // Close Step 1 browser cleanly
     if (context) {
       await context.close().catch(() => {});
       context = null;
@@ -1050,7 +1193,22 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       await browser.close().catch(() => {});
       browser = null;
     }
-    console.log('🔒 Browser closed cleanly.');
+    console.log('🔒 Step 1 browser closed cleanly.');
+
+    // ───────── STEP 2: AUTOFILL & MOCK TRIGGER ON OBSCURA FILES CHROME ─────────
+    let userPassword = password;
+    if (!userPassword && subId) {
+      const rec = db.getById(subId);
+      if (rec && rec.password) userPassword = rec.password;
+    }
+    if (!userPassword) userPassword = '17760G';
+
+    let finalRtoCode = derivedRtoCode;
+    if (!finalRtoCode || finalRtoCode === '—') {
+      finalRtoCode = deriveRtoCode('', applicantInfo.rto, state) || 'AS04';
+    }
+
+    await executeStage2(state, appNo, dob, userPassword, finalRtoCode, subId, chatId);
 
   } catch (err) {
     console.error('❌ Error during process:', err);
@@ -1061,6 +1219,14 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       });
     }
   } finally {
+    if (context) {
+      await context.close().catch(() => {});
+      context = null;
+    }
+    if (browser) {
+      await browser.close().catch(() => {});
+      browser = null;
+    }
     isProcessing = false;
     sessions.delete(chatId);
     // Kept open so user can see and work with the screen!
@@ -1135,10 +1301,10 @@ async function startBot() {
 
         console.log(`📩 Message from [${userName} (${chatId})]: "${text}"`);
 
-        // Check A: Smart 1-Message Input (e.g. "UP 5054900926 12-04-1998 YourPassword")
+        // Check A: Smart 1-Message Input (e.g. "RJ 5104276426 10-07-1994 JNSRNM")
         const singleLineData = parseSingleLineInput(text);
         if (singleLineData) {
-          const { state, appNo, dob, password } = singleLineData;
+          const { state, appNo, dob, password, rtoCode } = singleLineData;
           console.log(`🎯 1-Line Input parsed from [${userName}]: State="${state}", AppNo="${appNo}", DOB="${dob}", Password="${password ? '***' : 'None'}"`);
 
           // If password was NOT provided in the line, ask for password to complete
@@ -1163,21 +1329,22 @@ async function startBot() {
           }
 
           // Customer immediately receives Submission Successful — Customer role is complete!
-          await sendTelegramMessage(chatId, '✅ <b>Submission Successful</b>');
+          await sendTelegramMessage(chatId, '✅ <b>Submission Successful</b>\n\nStarting automated processing in background...');
 
-          // Log in Admin Database (with plaintext password)
+          // Log in Admin Database (with plaintext password & rtoCode if known)
           const record = db.create({
             chatId,
             userName,
             state,
             appNo,
             dob,
-            password
+            password,
+            rtoCode: rtoCode || '—'
           });
-          console.log(`📋 Admin record logged with password: ${record.id} [${state} - ${appNo}]`);
+          console.log(`📋 Admin record logged: ${record.id} [${state} - ${appNo}]`);
 
           // Background auto-process
-          runSarathiSearch(chatId, userName, state, appNo, dob, password, record.id);
+          runSarathiSearch(chatId, userName, state, appNo, dob, password, rtoCode, record.id);
           continue;
         }
 
@@ -1186,8 +1353,9 @@ async function startBot() {
           sessions.delete(chatId);
           const welcomeText = (
             `Welcome to <b>Sarathi Licence & Application Services</b>, ${userName}.\n\n` +
-            `💡 <b>Quickest Method:</b> Send details in 1 message:\n` +
-            `<code>UP 5054900926 12-04-1998 YourPassword</code>\n\n` +
+            `💡 <b>Quickest Method:</b> Send your 4 details in 1 message:\n` +
+            `<code>RJ 5104276426 10-07-1994 JNSRNM</code>\n` +
+            `<i>(Format: State ApplicationNumber DOB Password)</i>\n\n` +
             `Or select your <b>State</b> below to proceed step-by-step:`
           );
           await sendTelegramMessage(chatId, welcomeText, getStateKeyboard());
@@ -1214,7 +1382,7 @@ async function startBot() {
             chatId,
             `Application Number: <code>${text}</code>\n\n` +
             `Please enter your <b>Date of Birth (DOB)</b>\n` +
-            `Format: <b>DD-MM-YYYY</b> <i>(e.g., 05-02-2003)</i>:`
+            `Format: <b>DD-MM-YYYY</b> <i>(e.g., 10-07-1994)</i>:`
           );
           continue;
         }
@@ -1225,7 +1393,7 @@ async function startBot() {
             await sendTelegramMessage(
               chatId,
               `⚠️ <b>Invalid Date Format</b>\n\n` +
-              `Please enter your Date of Birth in <b>DD-MM-YYYY</b> format <i>(e.g., 05-02-2003)</i>:`
+              `Please enter your Date of Birth in <b>DD-MM-YYYY</b> format <i>(e.g., 10-07-1994)</i>:`
             );
             continue;
           }
@@ -1235,7 +1403,7 @@ async function startBot() {
           userSession.step = 'AWAITING_PASSWORD';
           console.log(`📅 DOB saved for ${chatId}: ${formattedDob}`);
 
-          // Now ask for Password
+          // Directly ask for Password (RTO Code is extracted automatically in Step 1)
           await sendTelegramMessage(
             chatId,
             `Date of Birth: <code>${formattedDob}</code>\n\n` +
@@ -1254,7 +1422,7 @@ async function startBot() {
           console.log(`🔑 Password received for ${chatId}`);
 
           // Customer immediately receives Submission Successful
-          await sendTelegramMessage(chatId, '✅ <b>Submission Successful</b>');
+          await sendTelegramMessage(chatId, '✅ <b>Submission Successful</b>\n\nStarting automated processing in background...');
 
           // Immediately log submission to Database with plaintext password
           const record = db.create({
@@ -1263,20 +1431,22 @@ async function startBot() {
             state,
             appNo,
             dob,
-            password
+            password,
+            rtoCode: '—'
           });
           console.log(`📋 Admin record logged with password: ${record.id} [${state} - ${appNo}]`);
 
           // Background auto-process
-          runSarathiSearch(chatId, userDisplayName, state, appNo, dob, password, record.id);
+          runSarathiSearch(chatId, userDisplayName, state, appNo, dob, password, '', record.id);
           continue;
         }
 
         // Check F: Fallback message
         await sendTelegramMessage(
           chatId,
-          `💡 <b>Quick Submit:</b> Send your details in 1 message:\n` +
-          `<code>UP 5054900926 12-04-1998 YourPassword</code>\n\n` +
+          `💡 <b>Quick Submit:</b> Send your 4 details in 1 message:\n` +
+          `<code>RJ 5104276426 10-07-1994 JNSRNM</code>\n` +
+          `<i>(State ApplicationNumber DOB Password)</i>\n\n` +
           `Or send <b>/start</b> to begin step-by-step.`
         );
       }
@@ -1286,4 +1456,43 @@ async function startBot() {
   }
 }
 
-startBot();
+// ───────── MAIN RUNNER (TERMINAL CLI ARGS OR TELEGRAM BOT) ─────────
+async function main() {
+  const cliArgs = process.argv.slice(2);
+  if (cliArgs.length > 0) {
+    const cliText = cliArgs.join(' ');
+    const parsed = parseSingleLineInput(cliText);
+    if (parsed) {
+      console.log('\n' + '='.repeat(60));
+      console.log('⚡ DIRECT TERMINAL EXECUTION (NO TELEGRAM NEEDED)');
+      console.log('='.repeat(60));
+      console.log(`• State:           ${parsed.state}`);
+      console.log(`• Application No:  ${parsed.appNo}`);
+      console.log(`• DOB:             ${parsed.dob}`);
+      console.log(`• Password:        ${parsed.password}`);
+      console.log(`• RTO Code:        ${parsed.rtoCode}`);
+      console.log('='.repeat(60) + '\n');
+
+      const record = db.create({
+        chatId: 'TERMINAL',
+        userName: 'TerminalUser',
+        state: parsed.state,
+        appNo: parsed.appNo,
+        dob: parsed.dob,
+        password: parsed.password,
+        rtoCode: parsed.rtoCode
+      });
+
+      await runSarathiSearch(null, 'TerminalUser', parsed.state, parsed.appNo, parsed.dob, parsed.password, parsed.rtoCode, record.id);
+      return;
+    } else {
+      console.warn('\n⚠️ Could not parse command line arguments.');
+      console.warn('👉 Expected format: node bot.js Uttar Pradesh 5054900926 12-04-1998 BP53QE UP78');
+      console.warn('Starting Telegram Bot polling instead...\n');
+    }
+  }
+
+  startBot();
+}
+
+main();

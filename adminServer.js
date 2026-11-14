@@ -3,19 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const db = require('./database');
 
-// Load .env if present (zero-dependency)
-try {
-  const envPath = path.join(__dirname, '.env');
-  if (fs.existsSync(envPath)) {
-    fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-      const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-      if (m && !process.env[m[1]]) {
-        process.env[m[1]] = (m[2] || '').trim().replace(/^['"](.*)['"]$/, '$1');
-      }
-    });
-  }
-} catch (_) {}
-
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 const PORT = process.env.ADMIN_PORT || 3000;
