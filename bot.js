@@ -159,13 +159,13 @@ async function sendTelegramPhoto(chatId, photoBuffer, caption, filename = 'captc
 }
 
 // ───────── GEMINI AI CAPTCHA SOLVER ─────────
-async function solveCaptchaWithGemini(photoBuffer) {
+async function solveCaptchaWithGemini(photoBufferOrBase64) {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'PASTE_YOUR_GEMINI_API_KEY_HERE') {
     console.error('❌ Gemini API key is missing! Please paste your Gemini API key in bot.js at GEMINI_API_KEY.');
     return null;
   }
 
-  const base64Data = photoBuffer.toString('base64');
+  const base64Data = Buffer.isBuffer(photoBufferOrBase64) ? photoBufferOrBase64.toString('base64') : photoBufferOrBase64;
   const candidateModels = [
     'gemini-3.5-flash-lite',
     'gemini-3.8-flash',
@@ -185,7 +185,7 @@ async function solveCaptchaWithGemini(photoBuffer) {
             }
           },
           {
-            text: 'Identify and transcribe the alphanumeric security verification code in this image. Output ONLY the exact characters without any explanation, spaces, or extra punctuation.'
+            text: 'Carefully identify and transcribe the alphanumeric security verification code in this image.\nRules:\n- Maintain exact uppercase and lowercase casing.\n- Pay close attention to differentiate: 0 vs O/o, 1 vs l/I, 5 vs S/s, 8 vs B, 9 vs g, 2 vs Z.\n- Ignore distortion lines or background noise.\n- Output ONLY the exact characters without any explanation, markdown, spaces, or extra punctuation.'
           }
         ]
       }
@@ -939,10 +939,35 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       console.log(`🔟 Capturing security code image (#capimg) - Attempt ${attempt}/5...`);
       const capImg = page.locator('#capimg');
       await capImg.waitFor({ state: 'visible', timeout: 10000 });
-      const capBuffer = await capImg.screenshot();
 
-      console.log('🤖 Auto-decoding verification code with Gemini AI...');
-      const solution = await solveCaptchaWithGemini(capBuffer);
+      // 3x High-Resolution Upscale & Noise Smoothing directly via Browser Canvas
+      let capData = await page.evaluate(() => {
+        try {
+          const img = document.querySelector('#capimg');
+          if (!img) return null;
+          const w = img.naturalWidth || img.width || 120;
+          const h = img.naturalHeight || img.height || 35;
+          const scale = 3;
+          const canvas = document.createElement('canvas');
+          canvas.width = w * scale;
+          canvas.height = h * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          return canvas.toDataURL('image/png').replace(/^data:image\/\w+;base64,/, '');
+        } catch (_) {
+          return null;
+        }
+      });
+
+      if (!capData) {
+        const capBuffer = await capImg.screenshot();
+        capData = capBuffer.toString('base64');
+      }
+
+      console.log('🤖 Auto-decoding verification code with Gemini AI (3x High-Resolution Upscaled)...');
+      const solution = await solveCaptchaWithGemini(capData);
 
       if (!solution) {
         console.log(`⚠️ Gemini AI response issue on attempt ${attempt}/5. Retrying with fresh code...`);
