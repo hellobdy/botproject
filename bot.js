@@ -6,7 +6,7 @@ const db = require('./database');
 const { createAdminServer } = require('./adminServer');
 
 // ───────── CONFIGURATION ─────────
-const BOT_TOKEN = '9144060826:AAGZs-cpHi52lDYx5GuKkrz5xxNUAgk742c';
+const BOT_TOKEN = '9080473114:AAGkJD4CeZjjmY1KXW0Cm9BhRQB8J51J6NU';
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 const DEFAULT_GEMINI_KEY = Buffer.from('QVEuQWI4Uk42S05SdXpmTUVqMHAwSnZIbTZzTFMyc1JYT2Y4Wmd4UktyVy1BN0lkUDdjNmc=', 'base64').toString('utf8');
