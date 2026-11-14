@@ -117,10 +117,10 @@ def solve_captcha_with_gemini(crop_bgr):
     base64_data = base64.b64encode(buffer).decode('utf-8')
 
     candidate_models = [
+        'gemini-3.5-flash',
         'gemini-3.5-flash-lite',
         'gemini-3.8-flash',
-        'gemini-flash-latest',
-        'gemini-flash-lite-latest'
+        'gemini-flash-latest'
     ]
 
     payload = {
@@ -133,13 +133,13 @@ def solve_captcha_with_gemini(crop_bgr):
                     }
                 },
                 {
-                    "text": "Identify and transcribe the alphanumeric security verification code in this image. Output ONLY the exact characters without any explanation, spaces, or quotes."
+                    "text": "Transcribe the exact 6 alphanumeric characters from this distorted graphic banner. Maintain exact uppercase and lowercase.\nRules:\n- Output ONLY the 6 characters without spaces, punctuation, or explanation.\n- Differentiate carefully between: 0 (zero) vs O/o, 1 vs l/I, 5 vs S/s, 8 vs B, 9 vs g, 2 vs Z."
                 }
             ]
         }],
         "generationConfig": {
             "temperature": 0.0,
-            "maxOutputTokens": 30
+            "maxOutputTokens": 150
         }
     }
 

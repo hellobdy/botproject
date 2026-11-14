@@ -167,11 +167,10 @@ async function solveCaptchaWithGemini(photoBufferOrBase64) {
 
   const base64Data = Buffer.isBuffer(photoBufferOrBase64) ? photoBufferOrBase64.toString('base64') : photoBufferOrBase64;
   const candidateModels = [
+    'gemini-3.5-flash',
     'gemini-3.5-flash-lite',
     'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-flash-lite-latest',
-    'gemini-3.1-flash-lite'
+    'gemini-flash-latest'
   ];
 
   const payload = {
@@ -185,14 +184,14 @@ async function solveCaptchaWithGemini(photoBufferOrBase64) {
             }
           },
           {
-            text: 'Carefully identify and transcribe the alphanumeric security verification code in this image.\nRules:\n- Maintain exact uppercase and lowercase casing.\n- Pay close attention to differentiate: 0 vs O/o, 1 vs l/I, 5 vs S/s, 8 vs B, 9 vs g, 2 vs Z.\n- Ignore distortion lines or background noise.\n- Output ONLY the exact characters without any explanation, markdown, spaces, or extra punctuation.'
+            text: 'Transcribe the exact 6 alphanumeric characters from this distorted graphic banner. Maintain exact uppercase and lowercase.\nRules:\n- Output ONLY the 6 characters without spaces, punctuation, or explanation.\n- Differentiate carefully between: 0 (zero) vs O/o, 1 vs l/I, 5 vs S/s, 8 vs B, 9 vs g, 2 vs Z.'
           }
         ]
       }
     ],
     generationConfig: {
       temperature: 0.0,
-      maxOutputTokens: 50
+      maxOutputTokens: 150
     }
   };
 
