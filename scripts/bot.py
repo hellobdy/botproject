@@ -261,15 +261,15 @@ def get_obscura_profile_dir():
                 for p_dir, p_info in profiles.items():
                     if env_profile in p_info.get('name', '').lower() or env_profile == p_dir.lower():
                         return p_dir
-            # 2. Priority 1: Check for 'testing' or 'test' profile
-            for p_dir, p_info in profiles.items():
-                p_name = p_info.get('name', '').lower()
-                if 'testing' in p_name or 'test' in p_name:
-                    return p_dir
-            # 3. Priority 2: Check for 'obscura' profile
+            # 2. Priority 1: Check for 'obscura' profile (Obscura Files)
             for p_dir, p_info in profiles.items():
                 p_name = p_info.get('name', '').lower()
                 if 'obscura' in p_name:
+                    return p_dir
+            # 3. Priority 2: Check for 'testing' or 'test' profile
+            for p_dir, p_info in profiles.items():
+                p_name = p_info.get('name', '').lower()
+                if 'testing' in p_name or 'test' in p_name:
                     return p_dir
             # 4. Fallback to first available profile
             if profiles:
