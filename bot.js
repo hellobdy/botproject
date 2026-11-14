@@ -14,7 +14,26 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || DEFAULT_GEMINI_KEY;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ───────── DYNAMIC DOWNLOADS DIRECTORY (WORKS ON ANY LAPTOP / PC) ─────────
+// ───────── DYNAMIC DESKTOP & DOWNLOADS DIRECTORY (WORKS ON ANY LAPTOP / PC) ─────────
+function getDesktopDir() {
+  if (process.env.DESKTOP_DIR && fs.existsSync(process.env.DESKTOP_DIR)) {
+    return process.env.DESKTOP_DIR;
+  }
+  const userDesktop = path.join(os.homedir(), 'Desktop');
+  if (fs.existsSync(userDesktop)) return userDesktop;
+
+  const oneDriveDesktop = path.join(os.homedir(), 'OneDrive', 'Desktop');
+  if (fs.existsSync(oneDriveDesktop)) return oneDriveDesktop;
+
+  if (process.env.USERPROFILE) {
+    const upDesktop = path.join(process.env.USERPROFILE, 'Desktop');
+    if (fs.existsSync(upDesktop)) return upDesktop;
+    const upOneDrive = path.join(process.env.USERPROFILE, 'OneDrive', 'Desktop');
+    if (fs.existsSync(upOneDrive)) return upOneDrive;
+  }
+  return userDesktop;
+}
+
 function getDownloadsDir() {
   if (process.env.DOWNLOADS_DIR && fs.existsSync(process.env.DOWNLOADS_DIR)) {
     return process.env.DOWNLOADS_DIR;
@@ -1964,14 +1983,23 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       console.log('   ⚠️ Photo extraction fallback:', e.message);
     }
 
-    // 15. Save Photo directly to Downloads folder
+    // 15. Save Photo directly to Desktop (and backup to Downloads)
     const photoFileName = `Photo_${appNo}.jpg`;
+    const desktopDir = getDesktopDir();
     const downloadsDir = getDownloadsDir();
-    const targetPhotoPath = path.join(downloadsDir, photoFileName);
+    const targetPhotoPath = path.join(desktopDir, photoFileName);
+    const backupPhotoPath = path.join(downloadsDir, photoFileName);
 
     if (photoBuffer) {
+      // Save directly to Desktop screen!
       fs.writeFileSync(targetPhotoPath, photoBuffer);
-      console.log(`💾 ✅ PHOTO SAVED TO DOWNLOADS: ${targetPhotoPath}`);
+      console.log(`💾 ✅ PHOTO SAVED DIRECTLY TO DESKTOP: ${targetPhotoPath}`);
+
+      // Also save backup copy in Downloads
+      try {
+        fs.writeFileSync(backupPhotoPath, photoBuffer);
+        console.log(`💾 ✅ Photo backup copy saved in Downloads: ${backupPhotoPath}`);
+      } catch (_) {}
 
       if (subId) {
         db.update(subId, {
@@ -1993,7 +2021,7 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
           `👨 <b>Father:</b> ${applicantInfo.fatherName || '—'}\n` +
           `🏢 <b>RTO Office:</b> ${applicantInfo.rto || '—'}\n` +
           `🏷️ <b>RTO Code:</b> <code>${derivedRtoCode || '—'}</code>\n\n` +
-          `💾 <b>Photo Saved:</b> <code>${photoFileName}</code> (Downloads folder)!\n\n` +
+          `🖥️ <b>Photo Saved directly on Desktop:</b> <code>${photoFileName}</code>\n\n` +
           `🎉 <b>Process Complete!</b>`;
         await sendTelegramPhoto(chatId, photoBuffer, msg, photoFileName).catch(() => {});
       }
@@ -2073,6 +2101,7 @@ async function startBot() {
 
   console.log('🤖 Professional Telegram Bot Service Running...');
   console.log(`   Token: ${BOT_TOKEN.substring(0, 15)}...`);
+  console.log(`   Local Desktop Folder:   ${getDesktopDir()}`);
   console.log(`   Local Downloads Folder: ${getDownloadsDir()}`);
   
   // Launch Admin Dashboard Server
