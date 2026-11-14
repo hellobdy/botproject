@@ -1025,37 +1025,30 @@ def ensure_page_ready():
     bring_chrome_to_front()
     time.sleep(0.3)
 
-    # Check if page is ALREADY loaded normally
-    if is_page_loaded_and_ready():
-        print("⚡ Obscura Files Chrome pehle se khula aur form ready hai! Direct proceed kar rahe hain.")
-        return
-
-    # Navigate to Target URL
-    print(f"🌐 Navigating to Target URL: {TARGET_URL}")
-    pyautogui.hotkey('ctrl', 'l')
-    time.sleep(0.3)
-    pyperclip.copy(TARGET_URL)
-    pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.2)
-    pyautogui.press('enter')
-
-    # User rule: "website open hoga url open hote hi hard refresh kroge aur aesa ayega ok krna fr load ho jatyeag normal aayega fr fill krna sab"
-    print("⏳ URL open ho gaya: 1.5 seconds me Hard Refresh (Ctrl+Shift+R) execute kar rahe hain...")
-    time.sleep(1.5)
-
-    hard_refresh_and_confirm_alert()
-
-    # Safety check: agar abhi bhi blank raha to ek baar aur try karein
+    # Check if page is already loaded, otherwise navigate to Target URL
     if not is_page_loaded_and_ready():
-        print("⚠️ Page abhi bhi blank hai: Ek baar aur Hard Refresh try kar rahe hain...")
-        hard_refresh_and_confirm_alert()
+        print(f"🌐 Navigating to Target URL: {TARGET_URL}")
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyperclip.copy(TARGET_URL)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.2)
+        pyautogui.press('enter')
+
+    # Wait for form & Sarathi Autofill to load (Reload completely removed as requested)
+    print("⏳ Form aur Sarathi Autofill load hone ka wait kar rahe hain (No Reload)...")
+    for attempt in range(1, 15):
+        if is_page_loaded_and_ready():
+            print(f"✅ Form aur Sarathi Autofill successfully load ho gaya (Check {attempt})!")
+            break
+        time.sleep(0.5)
 
     # Ensure Chrome zoom is normalized to 100% on any computer
     pyautogui.hotkey('ctrl', '0')
     time.sleep(0.2)
     pyautogui.press('esc')
     time.sleep(0.2)
-    print("✅ Chrome window 100% ready & full screen!")
+    print("✅ Chrome window 100% ready! Seedha Application Number fill karna shuru kar rahe hain...")
 
 def handle_photo_upload(app_no):
     """
