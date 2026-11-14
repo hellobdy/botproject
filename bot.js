@@ -15,23 +15,36 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || DEFAULT_GEMINI_KEY;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ───────── DYNAMIC DESKTOP & DOWNLOADS DIRECTORY (WORKS ON ANY LAPTOP / PC) ─────────
-function getDesktopDir() {
+function getDesktopDirs() {
+  const dirs = new Set();
   if (process.env.DESKTOP_DIR && fs.existsSync(process.env.DESKTOP_DIR)) {
-    return process.env.DESKTOP_DIR;
+    dirs.add(process.env.DESKTOP_DIR);
   }
-  const userDesktop = path.join(os.homedir(), 'Desktop');
-  if (fs.existsSync(userDesktop)) return userDesktop;
-
+  // 1. OneDrive Desktop (Prioritize for Windows 10/11 where OneDrive Desktop is the active visible screen)
   const oneDriveDesktop = path.join(os.homedir(), 'OneDrive', 'Desktop');
-  if (fs.existsSync(oneDriveDesktop)) return oneDriveDesktop;
+  if (fs.existsSync(oneDriveDesktop)) dirs.add(oneDriveDesktop);
+
+  if (process.env.USERPROFILE) {
+    const upOneDrive = path.join(process.env.USERPROFILE, 'OneDrive', 'Desktop');
+    if (fs.existsSync(upOneDrive)) dirs.add(upOneDrive);
+  }
+
+  // 2. Standard user Desktop
+  const userDesktop = path.join(os.homedir(), 'Desktop');
+  if (fs.existsSync(userDesktop)) dirs.add(userDesktop);
 
   if (process.env.USERPROFILE) {
     const upDesktop = path.join(process.env.USERPROFILE, 'Desktop');
-    if (fs.existsSync(upDesktop)) return upDesktop;
-    const upOneDrive = path.join(process.env.USERPROFILE, 'OneDrive', 'Desktop');
-    if (fs.existsSync(upOneDrive)) return upOneDrive;
+    if (fs.existsSync(upDesktop)) dirs.add(upDesktop);
   }
-  return userDesktop;
+
+  if (dirs.size === 0) dirs.add(userDesktop);
+  return Array.from(dirs);
+}
+
+function getDesktopDir() {
+  const dirs = getDesktopDirs();
+  return dirs[0];
 }
 
 function getDownloadsDir() {
@@ -1983,17 +1996,25 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
       console.log('   ⚠️ Photo extraction fallback:', e.message);
     }
 
-    // 15. Save Photo directly to Desktop (and backup to Downloads)
+    // 15. Save Photo directly to Desktop (all detected Desktop folders) and backup to Downloads
     const photoFileName = `Photo_${appNo}.jpg`;
-    const desktopDir = getDesktopDir();
+    const desktopDirs = getDesktopDirs();
     const downloadsDir = getDownloadsDir();
-    const targetPhotoPath = path.join(desktopDir, photoFileName);
+    const primaryDesktop = getDesktopDir();
+    const targetPhotoPath = path.join(primaryDesktop, photoFileName);
     const backupPhotoPath = path.join(downloadsDir, photoFileName);
 
     if (photoBuffer) {
-      // Save directly to Desktop screen!
-      fs.writeFileSync(targetPhotoPath, photoBuffer);
-      console.log(`💾 ✅ PHOTO SAVED DIRECTLY TO DESKTOP: ${targetPhotoPath}`);
+      // Save directly to ALL Desktop locations (OneDrive Desktop + Standard Desktop)
+      for (const dDir of desktopDirs) {
+        try {
+          const dPath = path.join(dDir, photoFileName);
+          fs.writeFileSync(dPath, photoBuffer);
+          console.log(`💾 ✅ PHOTO SAVED DIRECTLY TO DESKTOP: ${dPath}`);
+        } catch (err) {
+          console.warn(`⚠️ Desktop save notice (${dDir}):`, err.message);
+        }
+      }
 
       // Also save backup copy in Downloads
       try {
