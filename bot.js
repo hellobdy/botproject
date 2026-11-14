@@ -184,14 +184,14 @@ async function solveCaptchaWithGemini(photoBufferOrBase64) {
             }
           },
           {
-            text: 'Transcribe the exact 6 alphanumeric characters from this distorted graphic banner. Maintain exact uppercase and lowercase.\nRules:\n- Output ONLY the 6 characters without spaces, punctuation, or explanation.\n- Differentiate carefully between: 0 (zero) vs O/o, 1 vs l/I, 5 vs S/s, 8 vs B, 9 vs g, 2 vs Z.'
+            text: 'Transcribe the alphanumeric characters from this distorted graphic banner. Maintain exact uppercase and lowercase.\nRules:\n- Output ONLY the characters without spaces, punctuation, or explanation.\n- Differentiate carefully between: 0 (zero) vs O/o, 1 vs l/I, 5 vs S/s, 8 vs B, 9 vs g, 2 vs Z.'
           }
         ]
       }
     ],
     generationConfig: {
       temperature: 0.0,
-      maxOutputTokens: 150
+      maxOutputTokens: 1000
     }
   };
 
