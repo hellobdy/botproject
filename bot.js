@@ -1569,7 +1569,7 @@ async function runSarathiSearch(chatId, userName, state, appNo, dob, password = 
   if (SKIP_STAGE_1) {
     console.log('⚡ [DEV TESTING] Stage 1 (Photo download) paused as requested. Directly executing Stage 2...');
     
-    let derivedRtoCode = rtoCodeOverride || 'AS04';
+    let derivedRtoCode = rtoCodeOverride || '';
     if (!derivedRtoCode || derivedRtoCode === '—') {
       if (subId) {
         const rec = db.getById(subId);
